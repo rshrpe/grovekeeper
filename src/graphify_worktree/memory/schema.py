@@ -6,7 +6,7 @@ or an action is a change here only.
 """
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import sys
@@ -41,6 +41,14 @@ REQUEST = {
         "description": "Explicit permission for this memory operation only, not enrollment or approval of note content. Session off always wins.",
     },
 }
+# The adapter arguments every graph tool takes (also injected into upstream schemas).
+GRAPH_REQUEST = {
+    "project_path": REQUEST["project_path"],
+    "allow_once": {
+        "type": "boolean", "default": False,
+        "description": "Explicit permission for this operation only, not enrollment. Session off always wins.",
+    },
+}
 CONFIRMED_MESSAGE = "confirmed must be true only after explicit user approval of this content and action"
 
 
@@ -51,18 +59,20 @@ class Action:
     properties: dict
     required: tuple
     writes: bool = False
+    requires: str = "Requires Obsidian project consent. "
+    request: dict = field(default_factory=lambda: REQUEST)
 
     @property
     def read_only(self):
         return not self.writes
 
     def mcp_description(self):
-        return "Requires Obsidian project consent. " + self.description
+        return self.requires + self.description
 
     def input_schema(self):
         return {
             "type": "object",
-            "properties": {**REQUEST, **self.properties},
+            "properties": {**self.request, **self.properties},
             "required": ["project_path", *self.required],
             "additionalProperties": False,
         }
@@ -157,6 +167,11 @@ def _check(name, rule, value):
     elif kind == "integer":
         if type(value) is not int or not rule["minimum"] <= value <= rule["maximum"]:
             raise MemoryRequestError(f"{name} must be an integer between {rule['minimum']} and {rule['maximum']}")
+    elif kind == "array":
+        if not isinstance(value, list) or not value or len(value) > rule["maxItems"]:
+            raise MemoryRequestError(f"{name} must be a list of 1 to {rule['maxItems']} strings")
+        for item in value:
+            text(item, name)
     elif kind == "boolean":
         if rule.get("const") is True and value is not True:
             raise MemoryRequestError(CONFIRMED_MESSAGE)
@@ -164,13 +179,13 @@ def _check(name, rule, value):
             raise MemoryRequestError(f"{name} must be a boolean")
 
 
-def validate(action, arguments):
+def validate(action, arguments, registry=ACTIONS):
     """Validated copy of arguments with schema defaults applied."""
-    if action not in ACTIONS:
+    if action not in registry:
         raise MemoryRequestError(f"unknown memory action: {action}")
     if not isinstance(arguments, dict):
         raise MemoryRequestError("arguments must be an object")
-    definition = ACTIONS[action]
+    definition = registry[action]
     missing = set(definition.required) - arguments.keys()
     if missing:
         raise MemoryRequestError("missing fields: " + ", ".join(sorted(missing)))
