@@ -8,7 +8,7 @@ from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 
 from graphify_worktree.memory import handle
-from graphify_worktree.policy import PolicyError
+from graphify_worktree.errors import MemoryRequestError, PolicyError
 from support import WRAPPER, Smoke, command, git as run_git, server
 
 SMOKE = Smoke('memory-smoke')
@@ -71,29 +71,28 @@ async def exercise(base):
     git(root, 'commit', '-m', 'Memory smoke source')
     alternate = base / 'alternate'
     git(root, 'worktree', 'add', '-b', 'alternate', alternate)
-    isolated_vault = base / 'isolated-vault'
     for mode in (None, 'graph'):
         if mode:
             command(WRAPPER, 'configure', mode, root)
         try:
-            handle('search', root, {'query': 'retry'}, vault=isolated_vault)
+            handle('search', root, {'query': 'retry'})
         except PolicyError:
             pass
         else:
             raise AssertionError('Memory read without Obsidian consent')
-        assert not isolated_vault.exists()
+        assert not vault().exists()
     command(WRAPPER, 'configure', 'obsidian', root)
-    assert handle('search', root, {'query': 'retry'}, vault=isolated_vault)['notes'] == []
-    assert not isolated_vault.exists(), 'Empty recall must not create a vault or locks'
+    assert handle('search', root, {'query': 'retry'})['notes'] == []
+    assert not vault().exists(), 'Empty recall must not create a vault or locks'
     refused = write_payload('decision', 'Unapproved', 'Never save this without approval')
     refused['confirmed'] = False
     try:
-        handle('save', root, refused, vault=isolated_vault)
-    except ValueError:
+        handle('save', root, refused)
+    except MemoryRequestError:
         pass
     else:
         raise AssertionError('Unconfirmed memory was persisted')
-    assert not isolated_vault.exists()
+    assert not vault().exists()
     passed('Consent and explicit confirmation gate storage; empty recall is read-only')
 
     original = saved(root, write_payload('decision', 'Payment retry ceiling', 'Use three payment retry attempts.'))

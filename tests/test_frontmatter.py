@@ -1,7 +1,8 @@
 """Memory note frontmatter: the subset of YAML that Obsidian edits produce."""
 import pytest
 
-from graphify_worktree.memory import _parse as parse
+from graphify_worktree.errors import MemoryRequestError
+from graphify_worktree.memory.store import parse_frontmatter as parse
 
 
 def test_json_scalars_lists_and_body_round_trip():
@@ -30,5 +31,5 @@ def test_obsidian_style_edits_are_accepted():
     ("---\ntitle: value # trailing comment\n---\n", "unsupported frontmatter value"),
 ])
 def test_unsupported_yaml_is_rejected_explicitly(text, message):
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(MemoryRequestError, match=message):
         parse(text)

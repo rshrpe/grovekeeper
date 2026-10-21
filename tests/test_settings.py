@@ -42,6 +42,6 @@ def test_relative_override_is_rejected(home, monkeypatch, accessor, variable, de
         accessor()
 
 
-def test_settings_error_is_a_value_error():
-    # Existing CLI/MCP handlers map ValueError to exit 1 / request errors.
-    assert issubclass(settings.SettingsError, ValueError)
+def test_settings_error_is_an_operation_error():
+    from graphify_worktree.errors import exit_code
+    assert exit_code(settings.SettingsError("relative")) == 1

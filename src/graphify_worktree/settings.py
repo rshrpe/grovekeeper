@@ -7,9 +7,7 @@ without re-importing. Empty overrides mean "use the default".
 import os
 from pathlib import Path
 
-
-class SettingsError(ValueError):
-    pass
+from graphify_worktree.errors import SettingsError
 
 
 def _path(variable, default):

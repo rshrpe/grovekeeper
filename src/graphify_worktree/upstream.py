@@ -14,12 +14,10 @@ from importlib.metadata import PackageNotFoundError, version
 import sys
 from types import SimpleNamespace
 
+from graphify_worktree.errors import UpstreamVersionError
+
 
 PINS = {"graphifyy": "0.9.93", "mcp": "2.3.0"}
-
-
-class UpstreamVersionError(ImportError):
-    pass
 
 
 def assert_versions():

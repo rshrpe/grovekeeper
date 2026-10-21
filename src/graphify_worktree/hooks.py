@@ -1,4 +1,9 @@
-"""Explicit repository-local Git hook chaining and lightweight graph invalidation."""
+"""Explicit repository-local Git hook chaining and lightweight graph invalidation.
+
+This file is also executed directly by the installed hook shims
+(`python -P hooks.py --dispatch STATE HOOK ...`), so it must keep working as a
+script.
+"""
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -11,10 +16,12 @@ import stat
 import subprocess
 import sys
 
-from graphify_worktree.policy import PolicyError, get_policy, git_env, require, resolve_root
+from graphify_worktree import artifacts, errors, gitutil
+from graphify_worktree.errors import GraphError, HookError, KnowledgeError, PolicyError
+from graphify_worktree.policy import get_policy, require, resolve_root
 
 
-EVENTS = frozenset(("post-checkout", "post-merge", "post-rewrite", "post-commit"))
+EVENTS = ("post-checkout", "post-commit", "post-merge", "post-rewrite")
 HOOKS = (
     "applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit",
     "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit",
@@ -25,23 +32,22 @@ HOOKS = (
     "post-index-change", "reference-transaction",
 )
 STATE_DIR = "graphify-worktree-hooks"
-MARKER = ".graphify-worktree-event.json"
-
-
-class HookError(Exception):
-    pass
+SCHEMA = 2  # 1: legacy, every Git hook shimmed with a shim that needs the tool
+EVENT_LOCK_WAIT = 5.0
 
 
 def _git(root, *args, allowed=(0,)):
-    result = subprocess.run(["git", "-C", str(root), *args], env=git_env(),
-                            capture_output=True, text=True)
+    result = gitutil.run(root, *args)
     if result.returncode not in allowed:
         raise HookError(result.stderr.strip() or "Git hook configuration failed")
     return result
 
 
 def _common(root):
-    return Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.rstrip("\n")).resolve(strict=True)
+    try:
+        return gitutil.common_dir(root)
+    except errors.GitError as error:
+        raise HookError(str(error)) from error
 
 
 def _plain(path, directory=False):
@@ -84,17 +90,51 @@ def _supported(root):
             raise HookError(f"per-worktree hooksPath override or ambiguous included configuration in {config}; no configuration changed")
 
 
-def _script(state, hook, python, module):
-    command = " ".join(shlex.quote(str(value)) for value in (python, module, "--dispatch", state, hook))
-    return f'#!/bin/sh\nexec {command} "$@"\n'
+# Shims ----------------------------------------------------------------------
+
+def shim_script(state, hook, saved):
+    """The shell shim Git runs for hook; depends on the manifest's schema."""
+    python, module = saved["python"], saved["module"]
+    if saved["schema"] == 1:
+        command = " ".join(shlex.quote(str(value)) for value in (python, module, "--dispatch", state, hook))
+        return f'#!/bin/sh\nexec {command} "$@"\n'
+    original = shlex.quote(str(Path(saved["original_directory"]) / hook))
+    q = shlex.quote
+    return (
+        "#!/bin/sh\n"
+        "# graphify-worktree hook shim. Without the tool, only the original hook runs.\n"
+        f"if [ -x {q(str(python))} ] && [ -f {q(str(module))} ]; then\n"
+        f"  exec {q(str(python))} -P {q(str(module))} --dispatch {q(str(state))} {q(hook)} \"$@\"\n"
+        "fi\n"
+        f"original={original}\n"
+        'if [ -f "$original" ] && [ -x "$original" ]; then\n'
+        '  exec "$original" "$@"\n'
+        "fi\n"
+        "exit 0\n"
+    )
+
+
+def _shimmed(saved):
+    return tuple(saved.get("hooks", HOOKS))
+
+
+def _wanted(root, saved):
+    """Event hooks plus every hook the original directory already provides."""
+    directory = Path(saved["original_directory"])
+    directory = directory if directory.is_absolute() else root / directory
+    present = {hook for hook in HOOKS if (directory / hook).is_file()}
+    return tuple(hook for hook in HOOKS if hook in EVENTS or hook in present)
 
 
 def _load(state):
     _plain(state, directory=True)
     _plain(state / "manifest.json")
-    with (state / "manifest.json").open(encoding="utf-8") as stream:
-        saved = json.load(stream)
-    if (not isinstance(saved, dict) or saved.get("schema") != 1
+    try:
+        with (state / "manifest.json").open(encoding="utf-8") as stream:
+            saved = json.load(stream)
+    except ValueError as error:
+        raise HookError(f"invalid owned hook manifest: {error}") from error
+    if (not isinstance(saved, dict) or saved.get("schema") not in (1, SCHEMA)
             or saved.get("common_dir") != str(state.parent)
             or saved.get("hooks_path") != str(state / "hooks")
             or not isinstance(saved.get("original_local"), list)
@@ -102,21 +142,39 @@ def _load(state):
             or not all(isinstance(value, str) for value in saved["original_local"])
             or not isinstance(saved.get("original_directory"), str)
             or not isinstance(saved.get("python"), str)
-            or not isinstance(saved.get("module"), str)):
+            or not isinstance(saved.get("module"), str)
+            or (saved["schema"] == SCHEMA and (not isinstance(saved.get("hooks"), list)
+                                               or not set(saved["hooks"]) <= set(HOOKS)))):
         raise HookError("invalid owned hook manifest")
     _plain(state / "hooks", directory=True)
     return saved
 
 
 def _intact(state, saved):
-    if set(os.listdir(state)) != {"manifest.json", "hooks"} or set(os.listdir(state / "hooks")) != set(HOOKS):
+    expected = set(_shimmed(saved))
+    if set(os.listdir(state)) != {"manifest.json", "hooks"} or set(os.listdir(state / "hooks")) != expected:
         raise HookError("owned hook directory has unexpected or missing files; refusing to modify it")
-    for hook in HOOKS:
+    for hook in expected:
         path = state / "hooks" / hook
         _plain(path)
-        if not os.access(path, os.X_OK) or path.read_text() != _script(state, hook, saved["python"], saved["module"]):
+        if not os.access(path, os.X_OK) or path.read_text() != shim_script(state, hook, saved):
             raise HookError(f"owned hook shim was modified: {path}")
 
+
+def _write_shims(state, saved, names):
+    for hook in names:
+        target = state / "hooks" / hook
+        target.write_text(shim_script(state, hook, saved), encoding="utf-8")
+        target.chmod(0o700)
+
+
+def _write_manifest(state, saved):
+    temporary = state / "manifest.json.tmp"
+    temporary.write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, state / "manifest.json")
+
+
+# Configuration lock ------------------------------------------------------------
 
 @contextmanager
 def _config_lock(root, common):
@@ -156,6 +214,8 @@ def _active(root, common, saved):
         raise HookError("core.hooksPath changed outside this integration; refusing to overwrite it")
 
 
+# Commands ----------------------------------------------------------------------
+
 def install(path):
     root = resolve_root(path)
     require(root, "graph")
@@ -167,7 +227,13 @@ def install(path):
             saved = _load(state)
             _active(root, common, saved)
             _intact(state, saved)
-            return {"state": "installed", "changed": False, "worktree_root": str(root), "hooks_path": saved["hooks_path"]}
+            added = [hook for hook in _wanted(root, saved) if hook not in _shimmed(saved)]
+            if added and saved["schema"] == SCHEMA:
+                saved["hooks"] = [hook for hook in HOOKS if hook in set(saved["hooks"]) | set(added)]
+                _write_shims(state, saved, added)
+                _write_manifest(state, saved)
+            changed = bool(added) and saved["schema"] == SCHEMA
+            return {"state": "installed", "changed": changed, "worktree_root": str(root), "hooks_path": saved["hooks_path"]}
         original = _values(root, lock)
         if len(original) > 1:
             raise HookError("multiple local core.hooksPath values are unsupported; no configuration changed")
@@ -179,19 +245,17 @@ def install(path):
         if candidate.resolve().is_relative_to(state):
             raise HookError("original hooksPath points into integration state; refusing recursive delegation")
         saved = {
-            "schema": 1, "common_dir": str(common), "hooks_path": str(state / "hooks"),
+            "schema": SCHEMA, "common_dir": str(common), "hooks_path": str(state / "hooks"),
             "original_local": original, "original_directory": directory,
             "python": sys.executable, "module": str(Path(__file__).resolve()),
         }
+        saved["hooks"] = list(_wanted(root, saved))
         # Prepare the owned directory before switching hooksPath. Never touch the
         # original directory, including shared/global and Husky-managed hooks.
         state.mkdir(mode=0o700)
         try:
             (state / "hooks").mkdir(mode=0o700)
-            for hook in HOOKS:
-                target = state / "hooks" / hook
-                target.write_text(_script(state, hook, saved["python"], saved["module"]), encoding="utf-8")
-                target.chmod(0o700)
+            _write_shims(state, saved, saved["hooks"])
             (state / "manifest.json").write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
             _set_config(root, lock, [saved["hooks_path"]])
             effective = _git(root, "config", "--file", str(lock), "--includes",
@@ -220,8 +284,10 @@ def status(path):
             saved = _load(state)
             _active(root, common, saved)
             _intact(state, saved)
-            result.update(state="installed", original_local=saved["original_local"], original_directory=saved["original_directory"])
-        except (HookError, OSError, ValueError) as error:
+            result.update(state="installed", original_local=saved["original_local"],
+                          original_directory=saved["original_directory"],
+                          unforwarded=[hook for hook in _wanted(root, saved) if hook not in _shimmed(saved)])
+        except (HookError, OSError) as error:
             result.update(state="conflict", reason=str(error))
     return result
 
@@ -238,7 +304,7 @@ def uninstall(path):
         _intact(state, saved)
         _set_config(root, lock, saved["original_local"])
         publish()
-        for hook in HOOKS:
+        for hook in _shimmed(saved):
             (state / "hooks" / hook).unlink()
         (state / "hooks").rmdir()
         (state / "manifest.json").unlink()
@@ -246,8 +312,14 @@ def uninstall(path):
     return {"state": "not-installed", "changed": True, "worktree_root": str(root)}
 
 
-def mark_event(path, event):
-    """No graph scan/build, no output creation, and no permission by hook install."""
+def mark_event(path, event, *, wait=EVENT_LOCK_WAIT):
+    """Tag the published generation as invalidated by a Git event.
+
+    No graph scan/build, no output creation, and no permission by hook install.
+    Takes the worktree lock so the tag cannot interleave with a publish; if a
+    refresh or query holds it longer than wait seconds the hint is skipped,
+    which is safe because every query re-checks source content anyway.
+    """
     if event not in EVENTS:
         return False
     root = resolve_root(path)
@@ -257,35 +329,43 @@ def mark_event(path, event):
     if not output.exists():
         return False
     _plain(output, directory=True)
+    try:
+        with artifacts.locked(root, timeout=wait):
+            return _write_event(root, output, event)
+    except GraphError:
+        return False
+
+
+def _write_event(root, output, event):
     # Directory-relative operations keep publication confined if output is moved.
     directory = os.open(output, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     temporary = None
     try:
-        for name in ("graph.json", ".graphify-worktree.json"):
+        for name in ("graph.json", artifacts.PROVENANCE):
             try:
                 info = os.stat(name, dir_fd=directory, follow_symlinks=False)
             except FileNotFoundError:
                 return False
             if not stat.S_ISREG(info.st_mode):
                 raise HookError(f"refusing non-regular graph artifact: {name}")
-        descriptor = os.open(".graphify-worktree.json", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+        descriptor = os.open(artifacts.PROVENANCE, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
         with os.fdopen(descriptor, encoding="utf-8") as stream:
             saved = json.load(stream)
         generation = saved.get("extracted_at") if isinstance(saved, dict) else None
         if not isinstance(generation, str) or not generation or saved.get("worktree_root") != str(root):
             return False
         try:
-            info = os.stat(MARKER, dir_fd=directory, follow_symlinks=False)
+            info = os.stat(artifacts.EVENT, dir_fd=directory, follow_symlinks=False)
             if not stat.S_ISREG(info.st_mode):
                 raise HookError("refusing non-regular event marker")
         except FileNotFoundError:
             pass
-        temporary = f"{MARKER}.{os.getpid()}.{os.urandom(8).hex()}"
+        temporary = f"{artifacts.EVENT}.{os.getpid()}.{os.urandom(8).hex()}"
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             json.dump({"event": event, "at": datetime.now(timezone.utc).isoformat(), "generation": generation}, stream)
             stream.write("\n")
-        os.replace(temporary, MARKER, src_dir_fd=directory, dst_dir_fd=directory)
+        os.replace(temporary, artifacts.EVENT, src_dir_fd=directory, dst_dir_fd=directory)
         temporary = None
         return True
     finally:
@@ -306,7 +386,7 @@ def dispatch(state_path, hook, arguments):
         original = Path(saved["original_directory"]) / hook
         if original.resolve().is_relative_to(state):
             raise HookError("refusing recursive original hook")
-    except (HookError, OSError, ValueError) as error:
+    except (HookError, OSError) as error:
         print(f"graphify-worktree hooks: {error}", file=sys.stderr)
         return 1  # Never silently bypass an original hook whose state is damaged.
     code = 0
@@ -326,7 +406,7 @@ def dispatch(state_path, hook, arguments):
     if hook in EVENTS:
         try:
             mark_event(Path.cwd(), hook)
-        except (HookError, PolicyError, OSError, ValueError):
+        except (KnowledgeError, OSError, ValueError):
             pass
     return code if code >= 0 else 128 - code
 
@@ -346,10 +426,10 @@ def run(arguments):
         return 1 if response["state"] == "conflict" else 0
     except PolicyError as error:
         print(json.dumps({"state": "denied", "reason": str(error)}))
-        return 5
-    except (HookError, OSError, ValueError) as error:
+        return errors.exit_code(error)
+    except (KnowledgeError, OSError) as error:
         print(json.dumps({"state": "error", "reason": str(error)}))
-        return 1
+        return errors.exit_code(error)
 
 
 if __name__ == "__main__":

@@ -32,8 +32,8 @@ def test_missing_upstream_package_is_refused(monkeypatch):
 
 
 def test_version_error_maps_to_cli_operation_error():
-    # The CLI reports ImportError as "graphify-worktree: ..." with exit 1.
-    assert issubclass(upstream.UpstreamVersionError, ImportError)
+    from graphify_worktree.errors import exit_code
+    assert exit_code(upstream.UpstreamVersionError("pins")) == 1
 
 
 def _imported_roots(path):

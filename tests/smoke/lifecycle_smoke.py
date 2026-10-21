@@ -7,7 +7,8 @@ import sys
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 
-from graphify_worktree import cli
+from graphify_worktree.errors import GraphError
+from graphify_worktree.guard import guarded_graph
 from graphify_worktree.policy import PolicyError
 from support import WRAPPER, Smoke, command, git, init_repo, server, wrapper_json
 
@@ -109,18 +110,17 @@ async def exercise(base):
             source.write_text(original)
             passed('Failed extraction refuses MCP answers while preserving the last good graph')
 
-            core = cli
             try:
-                with core.guarded_graph(root):
+                with guarded_graph(root):
                     source.write_text('def changed_during_query():\n    return 400\n')
-            except core.Error:
+            except GraphError:
                 pass
             else:
                 raise AssertionError('A source-changing query was allowed to return its result')
             assert digest(graph_path(root)) == good
             assert 'changed_during_query' in await node(root, 'changed_during_query')
             try:
-                with core.guarded_graph(root):
+                with guarded_graph(root):
                     command(WRAPPER, 'configure', 'off', root)
             except PolicyError:
                 pass
