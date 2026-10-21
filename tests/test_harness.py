@@ -341,3 +341,92 @@ def test_install_skips_absent_harnesses(home, tmp_path, checkout, fake_claude):
     harness.install(repo, bin_dir, tmp_path / "backup")
     assert not (home / ".codex").exists() and not (home / ".omp").exists() and not (home / ".claude").exists()
     assert not fake_claude.exists()
+
+
+# Session-start recall hook ---------------------------------------------------
+
+RECALL = "/bin/graphify-worktree recall"
+OURS = {"type": "command", "command": RECALL, "timeout": 5}
+SUPERPOWERS = {"matcher": "startup", "hooks": [{"type": "command", "command": "other-session-hook"}]}
+
+
+def test_session_hook_added_beside_existing_hooks_without_mutating_input():
+    data = {"model": "x", "hooks": {"SessionStart": [SUPERPOWERS], "PreToolUse": [{"hooks": []}]}}
+    result = harness.upsert_session_hook(data, RECALL)
+    assert result == {"model": "x", "hooks": {
+        "SessionStart": [SUPERPOWERS, {"matcher": "startup|clear|compact", "hooks": [OURS]}],
+        "PreToolUse": [{"hooks": []}]}}
+    assert data["hooks"]["SessionStart"] == [SUPERPOWERS]
+
+
+def test_session_hook_upsert_is_idempotent_and_repairs_our_entry_in_place():
+    once = harness.upsert_session_hook({}, RECALL)
+    assert harness.upsert_session_hook(once, RECALL) == once
+    drifted = {"hooks": {"SessionStart": [{"matcher": "startup", "hooks": [{**OURS, "timeout": 60}]}, SUPERPOWERS]}}
+    assert harness.upsert_session_hook(drifted, RECALL) == {"hooks": {"SessionStart": [
+        {"matcher": "startup|clear|compact", "hooks": [OURS]}, SUPERPOWERS]}}
+
+
+def test_session_hook_removal_keeps_other_handlers_and_drops_empty_containers():
+    shared = {"matcher": "startup", "hooks": [OURS, {"type": "command", "command": "keep"}]}
+    data = {"hooks": {"SessionStart": [shared, SUPERPOWERS]}}
+    assert harness.remove_session_hook(data, RECALL) == {"hooks": {"SessionStart": [
+        {"matcher": "startup", "hooks": [{"type": "command", "command": "keep"}]}, SUPERPOWERS]}}
+    only_ours = harness.upsert_session_hook({"theme": "dark"}, RECALL)
+    assert harness.remove_session_hook(only_ours, RECALL) == {"theme": "dark"}
+
+
+def test_session_hook_removal_leaves_other_installations_alone():
+    other = harness.upsert_session_hook({}, "/elsewhere/graphify-worktree recall")
+    assert harness.remove_session_hook(other, RECALL) == other
+
+
+def recall_hooks(path):
+    data = json.loads(path.read_text()) if path.exists() else {}
+    return [handler["command"] for group in data.get("hooks", {}).get("SessionStart", [])
+            for handler in group["hooks"]]
+
+
+def test_session_recall_is_registered_only_when_asked(home, tmp_path, checkout, fake_claude):
+    repo, bin_dir = checkout
+    (home / ".claude").mkdir()
+    (home / ".codex").mkdir()
+    (home / ".omp/agent").mkdir(parents=True)
+    claude, codex = home / ".claude/settings.json", home / ".codex/hooks.json"
+    command = f"{bin_dir}/graphify-worktree recall"
+    messages = []
+
+    harness.install(repo, bin_dir, tmp_path / "backup")
+    assert recall_hooks(claude) == [] and not codex.exists()
+
+    harness.install(repo, bin_dir, tmp_path / "backup", session_recall=True, report=messages.append)
+    assert recall_hooks(claude) == [command] and recall_hooks(codex) == [command]
+    assert any("trust" in line and "/hooks" in line for line in messages if line.startswith("codex"))
+    assert any("session-start" in line and "not supported" in line for line in messages if line.startswith("omp"))
+
+    harness.install(repo, bin_dir, tmp_path / "backup")
+    assert recall_hooks(claude) == [command], "an install that does not ask leaves the hook alone"
+
+    harness.install(repo, bin_dir, tmp_path / "backup", session_recall=False)
+    assert recall_hooks(claude) == [] and recall_hooks(codex) == []
+
+
+def test_uninstall_removes_the_session_recall_hook(home, tmp_path, checkout, fake_claude):
+    repo, bin_dir = checkout
+    (home / ".claude").mkdir()
+    (home / ".claude/settings.json").write_text(json.dumps({"theme": "dark"}) + "\n")
+    harness.install(repo, bin_dir, tmp_path / "backup", session_recall=True)
+    harness.uninstall(repo, bin_dir, tmp_path / "uninstall-backup")
+    assert json.loads((home / ".claude/settings.json").read_text()) == {"theme": "dark"}
+    assert (tmp_path / "backup/files/.claude/settings.json").read_text() == '{"theme": "dark"}\n'
+
+
+def test_session_recall_flag_from_the_command_line(home, tmp_path, checkout, fake_claude):
+    repo, bin_dir = checkout
+    (home / ".claude").mkdir()
+    harness.main(["install", "--repo", str(repo), "--bin-dir", str(bin_dir),
+                  "--backup-dir", str(tmp_path / "backup"), "--session-recall", "on"])
+    assert recall_hooks(home / ".claude/settings.json") == [f"{bin_dir}/graphify-worktree recall"]
+    harness.main(["install", "--repo", str(repo), "--bin-dir", str(bin_dir),
+                  "--backup-dir", str(tmp_path / "backup"), "--session-recall", "off"])
+    assert recall_hooks(home / ".claude/settings.json") == []

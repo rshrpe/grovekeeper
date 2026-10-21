@@ -9,6 +9,7 @@ It wraps upstream Graphify rather than replacing it. What it adds:
 - **Opt-in per repository.** Nothing is scanned, built, exported or recalled until the user picks a mode for the repository.
 - **One graph per worktree, never stale.** Every query checks a full content fingerprint (plus HEAD, branch, scope and Graphify version). It rebuilds under a per-worktree lock when needed and withholds the answer if sources or consent change while it runs. A rebuild is staged in a scratch directory and only a completed, re-verified extraction replaces the owned artifacts, so a failed build keeps the last good graph.
 - **Structural extraction only.** `GRAPHIFY_BACKEND=none` is forced, so ambient API keys can never turn on LLM extraction or labelling.
+- **Optional session-start recall.** Claude Code and Codex can inject a short list of accepted memory titles when a session starts, only in `obsidian` mode and silently otherwise (`WORKTREE_KNOWLEDGE_SESSION_RECALL=1 ./install.sh`).
 - **Generated vs authored knowledge stay apart.** Each worktree exports to its own generated vault. Durable decisions, facts and lessons live as Markdown notes in an authored vault, and are saved only with explicit user approval, with provenance-preserving accept/supersede and no delete.
 
 ## Prerequisites
@@ -75,6 +76,7 @@ graphify-worktree ensure .                 # build or reuse a fresh graph
 graphify-worktree status .                 # 0 fresh, 3 stale, 4 missing, 5 denied
 graphify-worktree export . --open          # obsidian mode: generated vault
 graphify-worktree memory search . --query "retry policy"
+graphify-worktree recall .                 # what the optional session-start hook injects (obsidian mode only)
 graphify-worktree --help
 ```
 
@@ -109,6 +111,7 @@ src/graphify_worktree/
   publish.py          refresh: verify and publish a new generation
   guard.py            guarded_graph/ensure: fresh graph in, result withheld if anything moved
   obsidian_export.py  generated vault export and `export --open`
+  recall.py           session-start hook: accepted memory titles, silent unless obsidian mode
   memory/schema.py    the memory action registry (validation, CLI, MCP schemas)
   memory/store.py     note format and safe file I/O
   memory/service.py   search/get/save/accept/supersede

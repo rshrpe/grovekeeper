@@ -21,8 +21,11 @@ FIELDS = {"schema_version", "id", "kind", "title", "status", "superseded_by", *O
 
 
 @contextmanager
-def directory(path, create, writing):
-    """Walk using directory descriptors so symlink swaps cannot redirect vault I/O."""
+def directory(path, create, writing, *, blocking=True):
+    """Walk using directory descriptors so symlink swaps cannot redirect vault I/O.
+
+    With blocking=False a held lock raises BlockingIOError instead of waiting.
+    """
     fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
     try:
         for component in path.parts[1:]:
@@ -42,7 +45,7 @@ def directory(path, create, writing):
             fd = child
         # The stable Memory directory itself is the per-repository lock: no lock
         # files or directories need to be created for a read of absent memory.
-        fcntl.flock(fd, fcntl.LOCK_EX if writing else fcntl.LOCK_SH)
+        fcntl.flock(fd, (fcntl.LOCK_EX if writing else fcntl.LOCK_SH) | (0 if blocking else fcntl.LOCK_NB))
         yield fd
     finally:
         os.close(fd)

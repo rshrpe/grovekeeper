@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,11 @@ START = "<!-- worktree-knowledge:start -->"
 END = "<!-- worktree-knowledge:end -->"
 SERVER = "graphify"
 SERVER_COMMAND = "graphify-worktree-mcp"
+CLI_COMMAND = "graphify-worktree"
+# Session-start recall (opt-in). Claude Code and Codex share this hook schema;
+# both treat plain stdout as context and a failing or slow hook as non-blocking.
+RECALL_MATCHER = "startup|clear|compact"
+RECALL_TIMEOUT_SEC = 5
 TOML_HEADER = f"[mcp_servers.{SERVER}]"
 IGNORE_LINE = "graphify-out/"
 CODEX_TIMEOUT_SEC = 600
@@ -160,6 +166,70 @@ def remove_json_server(data):
     result = copy.deepcopy(data)
     result.get("mcpServers", {}).pop(SERVER, None)
     return result
+
+
+# Session-start hooks (Claude settings.json, Codex hooks.json) -------------------
+
+def recall_command(bin_dir):
+    return f"{shlex.quote(str(Path(bin_dir) / CLI_COMMAND))} recall"
+
+
+def upsert_session_hook(data, command):
+    """Our SessionStart handler, repaired in place if present, else appended."""
+    result = copy.deepcopy(data)
+    groups = result.setdefault("hooks", {}).setdefault("SessionStart", [])
+    handler = {"type": "command", "command": command, "timeout": RECALL_TIMEOUT_SEC}
+    for group in groups:
+        for index, existing in enumerate(group.get("hooks", [])):
+            if existing.get("command") == command:
+                group["hooks"][index] = handler
+                group["matcher"] = RECALL_MATCHER
+                return result
+    groups.append({"matcher": RECALL_MATCHER, "hooks": [handler]})
+    return result
+
+
+def remove_session_hook(data, command):
+    """Drop only handlers running exactly command, then any containers left empty."""
+    result = copy.deepcopy(data)
+    hooks = result.get("hooks", {})
+    groups = []
+    for group in hooks.get("SessionStart", []):
+        kept = [handler for handler in group.get("hooks", []) if handler.get("command") != command]
+        if kept:
+            groups.append({**group, "hooks": kept})
+    if groups:
+        hooks["SessionStart"] = groups
+    else:
+        hooks.pop("SessionStart", None)
+    if "hooks" in result and not hooks:
+        result.pop("hooks")
+    return result
+
+
+SESSION_HOOK_FILES = {"claude": ".claude/settings.json", "codex": ".codex/hooks.json"}
+SESSION_HOOK_NOTES = {
+    "codex": "Codex skips new hooks until you trust them: run /hooks in Codex once",
+    "omp": "session-start recall not supported: OMP runs no shell-command hooks (only TypeScript extensions)",
+}
+
+
+def _session_recall(name, home, command, wanted, backup_dir, report):
+    """wanted: True registers, False removes, None leaves the hook as it is."""
+    if wanted is None:
+        return
+    if name not in SESSION_HOOK_FILES:
+        if wanted:
+            report(f"{name}: {SESSION_HOOK_NOTES[name]}")
+        return
+    path = home / SESSION_HOOK_FILES[name]
+    if not wanted and not path.exists():
+        return
+    change = upsert_session_hook if wanted else remove_session_hook
+    changed = _edit_json(path, lambda data: change(data, command), backup_dir)
+    report(f"{name}: session-start recall hook {('registered' if wanted else 'removed') if changed else 'unchanged'}")
+    if wanted and name in SESSION_HOOK_NOTES:
+        report(f"{name}: {SESSION_HOOK_NOTES[name]}")
 
 
 # Claude --------------------------------------------------------------------
@@ -297,7 +367,7 @@ def _edit_json(path, change, backup_dir):
 
 # Install / uninstall -------------------------------------------------------
 
-def install(repo, bin_dir, backup_dir, *, report=print):
+def install(repo, bin_dir, backup_dir, *, session_recall=None, report=print):
     repo, bin_dir, backup_dir = Path(repo).resolve(), Path(bin_dir), Path(backup_dir)
     home = Path.home()
     template = (repo / "harness/worktree-knowledge.md").read_text(encoding="utf-8")
@@ -336,6 +406,7 @@ def install(repo, bin_dir, backup_dir, *, report=print):
             config = home / ".omp/agent/config.yml"
             if not omp_discovers(skill_dir, config.read_text(encoding="utf-8") if config.exists() else ""):
                 report(f"omp: add {skill_dir.parent} to skills.customDirectories in {config} so OMP discovers the skill")
+        _session_recall(name, home, recall_command(bin_dir), session_recall, backup_dir, report)
 
     ignore = global_excludes_file()
     report(f"git: {ignore} {'now ignores' if ensure_ignore_line(ignore) else 'already ignores'} {IGNORE_LINE}")
@@ -361,6 +432,7 @@ def uninstall(repo, bin_dir, backup_dir, *, report=print):
             _edit(home / ".codex/config.toml", remove_toml_server, backup_dir)
         elif name == "omp" and (home / ".omp/agent/mcp.json").exists():
             _edit_json(home / ".omp/agent/mcp.json", remove_json_server, backup_dir)
+        _session_recall(name, home, recall_command(bin_dir), False, backup_dir, report)
     if unlink_if_points_to(skill_dir, source):
         report(f"skill: removed link {skill_dir}")
     report(f"pre-uninstall copies of edited files: {backup_dir}")
@@ -373,6 +445,8 @@ def main(argv=None):
     install_parser.add_argument("--repo", required=True, help="grovekeeper checkout providing the skill and rules")
     install_parser.add_argument("--bin-dir", required=True, help="directory holding graphify-worktree-mcp")
     install_parser.add_argument("--backup-dir", required=True)
+    install_parser.add_argument("--session-recall", choices=("on", "off"),
+                                help="register (on) or remove (off) the session-start recall hook; omitted leaves it unchanged")
     uninstall_parser = actions.add_parser("uninstall")
     uninstall_parser.add_argument("--repo", required=True)
     uninstall_parser.add_argument("--bin-dir", required=True)
@@ -380,7 +454,8 @@ def main(argv=None):
     arguments = parser.parse_args(argv)
     try:
         if arguments.action == "install":
-            install(arguments.repo, arguments.bin_dir, arguments.backup_dir)
+            recall = {"on": True, "off": False, None: None}[arguments.session_recall]
+            install(arguments.repo, arguments.bin_dir, arguments.backup_dir, session_recall=recall)
         else:
             uninstall(arguments.repo, arguments.bin_dir, arguments.backup_dir)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:

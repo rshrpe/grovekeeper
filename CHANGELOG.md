@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Added in Phase 3: session-start recall (needs sign-off)
+- **`graphify-worktree recall [PATH]`** prints a list of accepted memory titles and IDs, newest first, for a session-start hook. It is capped at 1,000 characters (titles at 100) and framed as untrusted evidence that must be fetched with `memory_get` and verified. It runs the cheap policy check first and prints nothing unless the effective mode is `obsidian`: unconfigured, off, graph-only, invalid preferences, outside a repository and `HARNESS_KNOWLEDGE_MODE=off` are all silent. It also stays silent when nothing is accepted, when a writer holds the memory lock (it does not wait), or when listing takes over two seconds. It reads notes only and never creates directories. Proposed and superseded notes and malformed notes are left out.
+- **Opt-in hook registration.** `WORKTREE_KNOWLEDGE_SESSION_RECALL=1 ./install.sh` (or `python -m graphify_worktree.harness install --session-recall on`) adds a `SessionStart` hook (matcher `startup|clear|compact`, timeout 5 s) to `~/.claude/settings.json` and `~/.codex/hooks.json`. `=0` / `off` removes it. Without the variable an install leaves any existing hook unchanged. Codex runs it only after the user trusts it with `/hooks`. OMP is not registered: it has no shell-command hooks, only TypeScript extensions.
+- `./uninstall.sh` also removes the hook entries that run this installation's `graphify-worktree recall`.
+
+### Changed in Phase 3 (needs sign-off)
+- **`recall` is exempt from the version-pin startup refusal.** It uses no Graphify or MCP API, and a hook must never fail a session start, so with mismatched pins it still runs and exits 0. Every other command still exits 1 on a mismatch. `recall` exits 0 in every case, including unexpected errors.
+- Unchanged: consent semantics, every other exit code, the MCP tool surface (`tests/fixtures/mcp_tools.json`), and existing registrations unless the variable is set.
+
 ### Added
 - Project and package name **grovekeeper** (uv tool `grovekeeper`, backups under `~/.local/share/grovekeeper/`). The skill (`worktree-knowledge`), the commands (`graphify-worktree`, `graphify-worktree-mcp`), the MCP server id (`graphify`), the environment variables (`WORKTREE_KNOWLEDGE_*`) and the rules markers are unchanged. `install.sh` removes a uv tool installed under the earlier name `worktree-knowledge` before installing. Git hooks installed while the tool had that name fall back to running only the original hook until `hooks install` is re-run.
 - GitHub Actions CI: unit and integration tests on Ubuntu and macOS with Python 3.11 and 3.12.

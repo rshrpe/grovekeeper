@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from graphify_worktree import artifacts, errors, upstream
-from graphify_worktree import hooks
+from graphify_worktree import hooks, recall
 from graphify_worktree.errors import PolicyError
 from graphify_worktree.freshness import inspect
 from graphify_worktree.guard import ensure
@@ -27,7 +27,7 @@ def parser():
     parser = argparse.ArgumentParser(
         prog="graphify-worktree",
         description="Local code-only Graphify graphs and isolated generated Obsidian vaults per Git worktree.",
-        epilog="Exit codes: 0 success/fresh, 1 operation error, 2 usage error, 3 stale, 4 missing, 5 policy denied, 130 interrupted. No LLM, daemon or global graph merge.",
+        epilog="Exit codes: 0 success/fresh, 1 operation error, 2 usage error, 3 stale, 4 missing, 5 policy denied, 130 interrupted; recall always 0. No LLM, daemon or global graph merge.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     policy_parser = commands.add_parser("policy", help="read repository knowledge preference without inspecting artifacts")
@@ -49,7 +49,20 @@ def parser():
         command_parser.add_argument("--once", action="store_true", help="permit only this operation without changing repository preference; session off still wins")
     memory_schema.add_parser(commands)
     hooks.add_parser(commands)
+    recall_parser = commands.add_parser("recall", help="session-start hook: print accepted memory titles in obsidian mode; otherwise silent; always exits 0")
+    recall_parser.add_argument("path", nargs="?", default=".")
     return parser
+
+
+def run_recall(path):
+    """A harness session start must never fail or show an error because of recall."""
+    try:
+        text = recall.session_context(path)
+    except Exception:
+        return 0
+    if text:
+        print(text)
+    return 0
 
 
 def main(argv=None):
@@ -61,6 +74,8 @@ def main(argv=None):
         return 0
     if arguments.command == "hooks":
         return hooks.run(arguments)
+    if arguments.command == "recall":
+        return run_recall(arguments.path)
     if arguments.command == "policy":
         try:
             policy = get_policy(arguments.path)
@@ -114,7 +129,10 @@ def report(error):
 
 def entrypoint():
     try:
-        upstream.assert_versions()
+        # recall uses no upstream API and runs from session-start hooks, which
+        # must keep working (silently) even when the pins are broken.
+        if sys.argv[1:2] != ["recall"]:
+            upstream.assert_versions()
         code = main()
     except KeyboardInterrupt:
         print("graphify-worktree: interrupted; unpublished graph discarded", file=sys.stderr)
