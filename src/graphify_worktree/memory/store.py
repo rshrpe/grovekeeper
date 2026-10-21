@@ -10,7 +10,7 @@ import stat
 import uuid
 
 from graphify_worktree.errors import MemoryRequestError
-from graphify_worktree.memory.schema import ACTORS, KINDS, STATUSES, note_id, text
+from graphify_worktree.memory.schema import ACTORS, KINDS, STATUSES, iso_date, note_id, text
 
 
 ORIGIN = ("date", "created_at", "repository", "common_git_dir", "worktree", "branch",
@@ -18,6 +18,8 @@ ORIGIN = ("date", "created_at", "repository", "common_git_dir", "worktree", "bra
 AUDIT = ("action", "at", "recorded_by", "source", "confirmation", "worktree", "branch", "commit")
 FIELDS = {"schema_version", "id", "kind", "title", "status", "superseded_by", *ORIGIN,
           *("audit_" + field for field in AUDIT)}
+OPTIONAL = ("verify_by", "stale_after")  # review dates; absent unless set
+AUDIT_ACTIONS = ("save", "accept", "supersede", "verify")
 
 
 @contextmanager
@@ -89,8 +91,11 @@ def parse_frontmatter(document):
 
 
 def validate(metadata, content, expected_id, repo):
-    if metadata.keys() != FIELDS:
+    if not FIELDS <= metadata.keys() <= FIELDS | set(OPTIONAL):
         raise MemoryRequestError("unexpected or missing frontmatter properties")
+    for key in OPTIONAL:
+        if key in metadata:
+            iso_date(metadata[key], key)
     if type(metadata["schema_version"]) is not int or metadata["schema_version"] != 1:
         raise MemoryRequestError("unsupported memory schema version")
     if metadata["id"] != expected_id:
@@ -128,7 +133,7 @@ def validate(metadata, content, expected_id, repo):
         raise MemoryRequestError("inconsistent audit history")
     if any(actor not in ACTORS for actor in metadata["audit_recorded_by"]):
         raise MemoryRequestError("invalid audit recording harness")
-    if any(action not in ("save", "accept", "supersede") for action in metadata["audit_action"]):
+    if any(action not in AUDIT_ACTIONS for action in metadata["audit_action"]):
         raise MemoryRequestError("invalid audit action")
     text(content, "content")
 

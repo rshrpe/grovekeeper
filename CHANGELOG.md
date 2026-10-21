@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Added in Phase 3: memory review dates, verify and lint (needs sign-off)
+- **Review dates.** `memory_save` takes optional `verify_by` and `stale_after` UTC dates (`YYYY-MM-DD`; not in the past; `stale_after` not before `verify_by`). They are stored as optional frontmatter properties of schema version 1 and are only written when set.
+  - Search and get add `freshness` (`verify_by`, `stale_after`, `state`: `current`, `verify_due` or `stale`) only for notes that have a date, so results and files for existing notes are byte-identical.
+  - Search still returns due and stale notes, flagged; ranking and applicability are unchanged.
+  - An older grovekeeper reading a note that has these properties skips it with a warning, like any note it cannot read.
+- **`memory_verify`** (CLI `memory verify PATH --input-file FILE`) is confirmation-gated, like the other writes. It records that the user re-verified a current note, sets exactly the given review dates (omitted ones are cleared) and appends a `verify` audit event. Content and provenance are never changed, and superseded notes cannot be verified.
+- **`memory_lint`** (CLI `memory lint PATH`) is read-only, changes nothing and creates nothing. It reports:
+  - unreadable notes;
+  - `verify_due` and `stale` notes;
+  - superseded notes whose replacement is missing, unreadable or not accepted;
+  - proposals whose branch no longer exists.
+
+  It needs Obsidian consent like every memory action, and exits 0 with the findings in JSON.
+- **MCP tool surface:** `memory_verify` and `memory_lint` are added after `memory_supersede`, and `memory_save` gains only the two optional date properties. Every other tool entry is byte-identical.
+
 ### Added in Phase 3: opt-in incremental rebuilds (needs sign-off)
 - **`WORKTREE_KNOWLEDGE_INCREMENTAL=1` makes rebuilds incremental.** It must be set for the CLI and in the environment the harness starts the MCP server with. Unset or any other value: rebuilds are the same full extractions as before, with no seed and no new provenance field.
 - **How it works:**

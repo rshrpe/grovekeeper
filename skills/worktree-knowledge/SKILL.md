@@ -43,7 +43,7 @@ Always use the configured managed MCP server (`graphify-worktree-mcp`), not the 
 
 ## Shared project memory
 
-Use memory independently of graph freshness: no graph build or graph-file read is required. The managed `memory_search`, `memory_get`, `memory_save`, `memory_accept`, and `memory_supersede` tools share the existing MCP connection and require `obsidian` participation. Session opt-out applies to all memory operations. An explicit one-off memory request can use `allow_once: true` (CLI `--once`), but graph-only permission is not memory permission.
+Use memory independently of graph freshness: no graph build or graph-file read is required. The managed `memory_search`, `memory_get`, `memory_save`, `memory_accept`, `memory_supersede`, `memory_verify`, and `memory_lint` tools share the existing MCP connection and require `obsidian` participation. Session opt-out applies to all memory operations. An explicit one-off memory request can use `allow_once: true` (CLI `--once`), but graph-only permission is not memory permission.
 
 ### Recall before relevant work
 
@@ -73,9 +73,17 @@ Use `memory_accept` for an explicitly accepted proposed note, with `id`, accepta
 
 When accepted knowledge changes, propose and save an accepted replacement first. Then call `memory_supersede` with the old `id`, `replacement_id`, change `source`, `recorded_by`, `confirmed: true`, and `confirmation`. The replacement must already be accepted in the same repository. Complete both operations before claiming the change is recorded; if supersession fails, report that both notes may still be current. The old note's original content and provenance remain intact, with a status change, replacement link, and audit history.
 
+### Review dates, re-verification and lint
+
+A note may carry optional `verify_by` and `stale_after` UTC dates (`YYYY-MM-DD`, not in the past, `stale_after` not before `verify_by`), proposed together with its content and saved with it. Results for such a note include `freshness` with `state` `current`, `verify_due` (after `verify_by`) or `stale` (after `stale_after`). Search still returns due and stale notes, flagged: re-check a `verify_due` note against current source before relying on it, and do not rely on a `stale` one until it is re-verified or superseded. Notes without dates are unchanged.
+
+When the user confirms a note is still true after it was re-checked, record that with `memory_verify` (`id`, how it was verified in `source`, `recorded_by`, `confirmed: true`, `confirmation`, and the new `verify_by`/`stale_after`). It sets exactly the dates given and clears any that are omitted, appends a `verify` audit event, and never changes content or provenance. Superseded notes cannot be verified. If the note is no longer true, save and accept a replacement and supersede it instead.
+
+`memory_lint` (CLI `memory lint PATH`) is a read-only health check that changes nothing. It reports unreadable notes, `verify_due` and `stale` notes, superseded notes whose replacement is missing, unreadable or not accepted, and proposals whose branch no longer exists. Report findings to the user; fixing them goes through the normal approval flow.
+
 There is no general overwrite/delete operation. Do not manually rewrite managed memory content or lifecycle metadata to evade confirmation/history. Existing unrelated authored notes are left untouched; no bulk import is performed. Graph refresh/export does not update or delete durable memory.
 
-CLI equivalents use `graphify-worktree memory search PATH --query "task terms" [--limit N] [--include-history]` (limit 1-20, default 5) and `memory get PATH --id ID`. Writes use `memory save|accept|supersede PATH --input-file FILE` (or `--input-file -` for JSON on stdin); pass the same payload fields as the MCP operation, without `project_path` or `allow_once`. Add `--once` only for explicitly authorized one-off memory work.
+CLI equivalents use `graphify-worktree memory search PATH --query "task terms" [--limit N] [--include-history]` (limit 1-20, default 5) and `memory get PATH --id ID`. `memory lint PATH` takes no other arguments. Writes use `memory save|accept|supersede|verify PATH --input-file FILE` (or `--input-file -` for JSON on stdin); pass the same payload fields as the MCP operation, without `project_path` or `allow_once`. Add `--once` only for explicitly authorized one-off memory work.
 
 Shared Obsidian memory does not synchronize or disable native Claude/OMP/Codex memory or chat histories. It is a common knowledge source retrieved by these workflow rules, not automatic transcript ingestion or a post-merge memory daemon.
 

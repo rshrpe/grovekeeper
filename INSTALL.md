@@ -56,7 +56,7 @@ PY="$(uv tool dir)/grovekeeper/bin/python"
 "$PY" tests/smoke/lifecycle_smoke.py
 ```
 
-Each smoke prints `PASS:` lines and exits 0. They use disposable repositories and a disposable vault directory, and need no network or LLM. Then open a session in each harness and confirm the `graphify` MCP server lists `knowledge_session`, the five `memory_*` tools, the two `learning_*` tools and the ten upstream graph/PR tools.
+Each smoke prints `PASS:` lines and exits 0. They use disposable repositories and a disposable vault directory, and need no network or LLM. Then open a session in each harness and confirm the `graphify` MCP server lists `knowledge_session`, the seven `memory_*` tools, the two `learning_*` tools and the ten upstream graph/PR tools.
 
 ## 5. Upgrade
 

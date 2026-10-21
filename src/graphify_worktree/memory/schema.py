@@ -7,8 +7,10 @@ or an action is a change here only.
 
 import argparse
 from dataclasses import dataclass, field
+from datetime import date
 import json
 from pathlib import Path
+import re
 import sys
 import uuid
 
@@ -20,6 +22,16 @@ KINDS = ("decision", "fact", "lesson")
 ACTORS = ("omp", "claude", "codex", "manual")
 STATUSES = ("proposed", "accepted", "superseded")
 ACTOR = {"type": "string", "enum": list(ACTORS)}
+REVIEW_DATES = {
+    "verify_by": {
+        "type": "string", "format": "date",
+        "description": "Optional UTC date (YYYY-MM-DD) by which the note should be re-verified against current source.",
+    },
+    "stale_after": {
+        "type": "string", "format": "date",
+        "description": "Optional UTC date (YYYY-MM-DD) after which the note must not be relied on without re-verification.",
+    },
+}
 UUID_FIELDS = frozenset(("id", "replacement_id"))
 APPROVAL = {
     "confirmed": {
@@ -106,6 +118,7 @@ ACTIONS = {action.name: action for action in (
             "recorded_by": ACTOR,
             "status": {"type": "string", "enum": ["proposed", "accepted"], "default": "proposed"},
             "pr": TEXT,
+            **REVIEW_DATES,
             **APPROVAL,
         },
         ("kind", "title", "content", "source", "recorded_by", "confirmed", "confirmation"),
@@ -136,6 +149,25 @@ ACTIONS = {action.name: action for action in (
         ("id", "replacement_id", "source", "recorded_by", "confirmed", "confirmation"),
         writes=True,
     ),
+    Action(
+        "verify",
+        "Record that the user re-verified a current note, setting exactly the given review dates (omitted ones are cleared), only after actual explicit user approval. Preserves content and provenance and appends verification evidence.",
+        {
+            "id": TEXT,
+            "source": {**TEXT, "description": "How the note was re-verified (evidence)."},
+            "recorded_by": ACTOR,
+            **REVIEW_DATES,
+            **APPROVAL,
+        },
+        ("id", "source", "recorded_by", "confirmed", "confirmation"),
+        writes=True,
+    ),
+    Action(
+        "lint",
+        "Read-only health check of this repository's memory: unreadable notes, overdue verify_by or stale_after dates, supersede links to missing replacements, and proposals whose branch no longer exists. Changes nothing.",
+        {},
+        (),
+    ),
 )}
 
 
@@ -145,6 +177,15 @@ def text(value, name):
     if not isinstance(value, str) or not value.strip() or "\0" in value:
         raise MemoryRequestError(f"{name} must be a nonempty string without NUL characters")
     return value
+
+
+def iso_date(value, name):
+    try:
+        if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return date.fromisoformat(value)
+    except ValueError:
+        pass
+    raise MemoryRequestError(f"{name} must be a date (YYYY-MM-DD)")
 
 
 def note_id(value, name="id"):
@@ -162,6 +203,8 @@ def _check(name, rule, value):
         text(value, name)
         if name in UUID_FIELDS:
             note_id(value, name)
+        if rule.get("format") == "date":
+            iso_date(value, name)
         if "enum" in rule and value not in rule["enum"]:
             raise MemoryRequestError(f"{name} must be one of: {', '.join(rule['enum'])}")
     elif kind == "integer":

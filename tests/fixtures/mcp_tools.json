@@ -455,6 +455,11 @@
           "minLength": 1,
           "type": "string"
         },
+        "stale_after": {
+          "description": "Optional UTC date (YYYY-MM-DD) after which the note must not be relied on without re-verification.",
+          "format": "date",
+          "type": "string"
+        },
         "status": {
           "default": "proposed",
           "enum": [
@@ -465,6 +470,11 @@
         },
         "title": {
           "minLength": 1,
+          "type": "string"
+        },
+        "verify_by": {
+          "description": "Optional UTC date (YYYY-MM-DD) by which the note should be re-verified against current source.",
+          "format": "date",
           "type": "string"
         }
       },
@@ -602,6 +612,99 @@
       "type": "object"
     },
     "name": "memory_supersede"
+  },
+  {
+    "annotations": {
+      "read_only_hint": false
+    },
+    "description": "Requires Obsidian project consent. Record that the user re-verified a current note, setting exactly the given review dates (omitted ones are cleared), only after actual explicit user approval. Preserves content and provenance and appends verification evidence.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_once": {
+          "default": false,
+          "description": "Explicit permission for this memory operation only, not enrollment or approval of note content. Session off always wins.",
+          "type": "boolean"
+        },
+        "confirmation": {
+          "description": "Context identifying the user's explicit approval; not a model-generated claim of permission.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "confirmed": {
+          "const": true,
+          "description": "Must be true only after actual explicit user approval of this exact content or transition. Never infer approval.",
+          "type": "boolean"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "project_path": {
+          "description": "Required exact absolute canonical Git worktree root; never a subdirectory or default checkout.",
+          "type": "string"
+        },
+        "recorded_by": {
+          "enum": [
+            "omp",
+            "claude",
+            "codex",
+            "manual"
+          ],
+          "type": "string"
+        },
+        "source": {
+          "description": "How the note was re-verified (evidence).",
+          "minLength": 1,
+          "type": "string"
+        },
+        "stale_after": {
+          "description": "Optional UTC date (YYYY-MM-DD) after which the note must not be relied on without re-verification.",
+          "format": "date",
+          "type": "string"
+        },
+        "verify_by": {
+          "description": "Optional UTC date (YYYY-MM-DD) by which the note should be re-verified against current source.",
+          "format": "date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_path",
+        "id",
+        "source",
+        "recorded_by",
+        "confirmed",
+        "confirmation"
+      ],
+      "type": "object"
+    },
+    "name": "memory_verify"
+  },
+  {
+    "annotations": {
+      "read_only_hint": true
+    },
+    "description": "Requires Obsidian project consent. Read-only health check of this repository's memory: unreadable notes, overdue verify_by or stale_after dates, supersede links to missing replacements, and proposals whose branch no longer exists. Changes nothing.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_once": {
+          "default": false,
+          "description": "Explicit permission for this memory operation only, not enrollment or approval of note content. Session off always wins.",
+          "type": "boolean"
+        },
+        "project_path": {
+          "description": "Required exact absolute canonical Git worktree root; never a subdirectory or default checkout.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_path"
+      ],
+      "type": "object"
+    },
+    "name": "memory_lint"
   },
   {
     "description": "Disable graph and project-memory knowledge for this MCP process, or restore saved repository policy. Never changes saved preferences; cannot override environment off.",

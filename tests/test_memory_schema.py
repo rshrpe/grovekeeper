@@ -13,7 +13,7 @@ NOTE_ID = "0b6f2a4e-8c1d-4f3a-9e2b-5d7c6a1b2c3d"
 WRITE = {"source": "s", "recorded_by": "claude", "confirmed": True, "confirmation": "user said yes"}
 
 
-@pytest.mark.parametrize("action", ["search", "get", "save", "accept", "supersede"])
+@pytest.mark.parametrize("action", list(schema.ACTIONS))
 def test_mcp_tool_definition_matches_captured_surface(action):
     tool = FIXTURE[f"memory_{action}"]
     definition = schema.ACTIONS[action]
