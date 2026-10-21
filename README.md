@@ -63,6 +63,7 @@ The skill is an operational guard on the managed tools, not a filesystem sandbox
 | `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI` | `~/.local/bin/obsidian` | Native Obsidian CLI for `export --open` |
 | `WORKTREE_KNOWLEDGE_SKILL_DIR` | `~/.agents/skills/worktree-knowledge` | Where the installer links the skill |
 | `WORKTREE_KNOWLEDGE_STATE_DIR` | `~/.local/state/grovekeeper` | Per-session counters of the optional pre-tool nudge |
+| `WORKTREE_KNOWLEDGE_INCREMENTAL` | unset | `1` makes rebuilds incremental (seeded upstream extract; full on any doubt) |
 | `HARNESS_KNOWLEDGE_MODE` | `default` | `off` disables knowledge for the process |
 
 Values must be absolute or start with `~`. Set vault overrides in the environment your harness starts the MCP server with, so the CLI and the server agree.
@@ -112,6 +113,7 @@ src/graphify_worktree/
   freshness.py        Generation, content snapshot, classify(), inspect()
   extract.py          Graphify structural extraction and report into scratch
   publish.py          refresh: verify and publish a new generation
+  incremental.py      opt-in incremental rebuilds: seed, plan, full on any doubt
   guard.py            guarded_graph/ensure: fresh graph in, result withheld if anything moved
   obsidian_export.py  generated vault export and `export --open`
   recall.py           session-start hook: accepted memory titles, silent unless obsidian mode

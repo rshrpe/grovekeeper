@@ -43,3 +43,8 @@ def skill_dir():
 def state_dir():
     """Small per-user runtime state (session nudge budgets); never inside a repository."""
     return _path("WORKTREE_KNOWLEDGE_STATE_DIR", ".local/state/grovekeeper")
+
+
+def incremental():
+    """Opt-in incremental rebuilds: only the exact value "1" enables them."""
+    return os.environ.get("WORKTREE_KNOWLEDGE_INCREMENTAL") == "1"

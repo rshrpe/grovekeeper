@@ -7,6 +7,31 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Added in Phase 3: opt-in incremental rebuilds (needs sign-off)
+- **`WORKTREE_KNOWLEDGE_INCREMENTAL=1` makes rebuilds incremental.** It must be set for the CLI and in the environment the harness starts the MCP server with. Unset or any other value: rebuilds are the same full extractions as before, with no seed and no new provenance field.
+- **How it works:**
+  - Each build keeps upstream's raw output (`manifest.json`, AST cache, `graph.json` before citations are rebased) as a seed in `graphify-out/.graphify-worktree-seed/<token>/`, named in provenance `build.seed`.
+  - The next rebuild moves that seed into the staged workspace and runs `graphify extract --code-only` without `--force`.
+  - Upstream trusts an unchanged mtime (`detect.detect_incremental`), so before the run every file whose content hash differs between the seed's generation and now is dropped from the seed manifest. A test shows a same-mtime, same-size edit would otherwise be published as fresh with the old symbols.
+- **Unchanged:** the content-fingerprint snapshot before and after extraction, consent checks and the staged owned-artifact publish.
+- **Full extract on any doubt**, with the reason recorded in provenance `build.reason`:
+  - the seed is missing or incomplete, or comes from another worktree;
+  - the Graphify version, scope or nested-checkout exclusions changed;
+  - the incremental run or its report failed;
+  - nine incremental builds have run in a row.
+- **Turning it off** removes the seed on the next rebuild. Seeds are about the size of upstream's AST cache (32 MB for 583 Python files).
+- **Why not upstream `update`, as the review proposed:** in 0.9.93 it has no `--out`, `--exclude` or `--code-only` (`cli.py:2781-2800`). It ingests every Markdown file, including `graphify-out/memory/*.md` (+926 nodes on a 97-file test repo). It also doesn't write `.graphify_analysis.json`, which report and export need. Seeded `extract` keeps the graph code-only.
+- **Measured** on a disposable copy of `networkx` (583 files, about 11,400 nodes), whole `graphify-worktree refresh` including both content snapshots:
+
+  | Change | Incremental | Full |
+  |---|---|---|
+  | one file | 8.45 s | 10.28 s |
+  | ten files | 8.95 s | 10.59 s |
+  | branch switch (25 files) | 8.89 s | 10.46 s |
+
+  The extract step alone takes 4.65 s instead of 7.87 s; snapshots, clustering and the report are unchanged.
+- **Known limitation:** an incremental merge can give an unresolved external reference (for example `typing.Mapping` as a base class) in a re-extracted file a global node id (`mapping`) where a full build gives a file-scoped one, and its edge follows. Measured: identical graphs for one changed file; 2 of about 11,400 nodes and 2 edges for 10 and 25 changed files. No other node attribute differs. The periodic full extract bounds this.
+
 ### Added in Phase 3: consent-aware pre-tool nudge (needs sign-off)
 - **`graphify-worktree nudge`** reads a Claude Code or Codex `PreToolUse` payload on stdin. It is modelled on upstream `graphify hook-guard` and is advisory only.
   - **When it speaks:** before a search (Grep, Glob, or a Bash command that actually runs grep/rg/find/fd/ag/...; upstream's own parser through `upstream.py`) or a Read of a source file that code-only extraction indexes (upstream's code extensions, not its docs list), it may add `additionalContext` suggesting the managed graph tools with the worktree's `project_path`.

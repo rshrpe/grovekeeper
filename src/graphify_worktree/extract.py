@@ -1,10 +1,14 @@
 """Run Graphify's structural extraction into a scratch directory and write its report."""
 
+import shutil
 import subprocess
 import sys
 
 from graphify_worktree import artifacts, upstream
 from graphify_worktree.errors import GraphError
+
+
+RAW_GRAPH = "raw-graph.json"  # upstream's own graph.json, kept for the next incremental seed
 
 
 def run_graphify(arguments, scoped):
@@ -63,13 +67,21 @@ def _report(staged, root, scoped, before):
     (staged / "GRAPH_REPORT.md").write_text(report, encoding="utf-8")
 
 
-def extract(root, scoped, scratch, before):
-    """Extract scoped sources into scratch/graphify-out; returns that staging directory."""
-    arguments = ["extract", scoped, "--code-only", "--force", "--out", scratch, "--max-workers", "4"]
+def extract(root, scoped, scratch, before, *, incremental=False, keep_raw=False):
+    """Extract scoped sources into scratch/graphify-out; returns that staging directory.
+
+    incremental=True omits --force so upstream reuses a seed already placed in
+    scratch/graphify-out. keep_raw=True keeps upstream's graph as RAW_GRAPH
+    before the report step rebases and labels the copy that gets published.
+    """
+    arguments = ["extract", scoped, "--code-only", *(() if incremental else ("--force",)),
+                 "--out", scratch, "--max-workers", "4"]
     for excluded in before["excludes"]:
         arguments.extend(["--exclude", excluded])
     run_graphify(arguments, scoped)
     staged = scratch / "graphify-out"
+    if keep_raw:
+        shutil.copyfile(staged / "graph.json", staged / RAW_GRAPH)
     try:
         _report(staged, root, scoped, before)
     except (KeyError, TypeError, ValueError) as error:
