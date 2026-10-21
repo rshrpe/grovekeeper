@@ -112,6 +112,10 @@ The managed server proxies all ten upstream Graphify tools: `query_graph`, `get_
 
 The managed server requires an explicit canonical worktree root, checks participation before graph access, ensures freshness, and exposes no default-graph resources. If MCP is unavailable, use ordinary source tools instead of starting the unguarded upstream server. Graph tools may rebuild local derived data; do not describe them as guaranteed read-only. Existing authored memory remains separate.
 
+## Optional pre-tool nudge
+
+When installed with `WORKTREE_KNOWLEDGE_NUDGE=1 ./install.sh`, Claude Code and Codex run `graphify-worktree nudge` before Grep, Glob, Read and Bash calls and managed `graphify` MCP calls. In a repository whose effective mode is `graph` or `obsidian`, a search (Grep, Glob, or a shell command that actually runs grep, rg, find, fd, ag or similar) or a Read of an indexed source file in the worktree may add a short suggestion to try the managed graph tools with the worktree's `project_path`. When no graph has been built yet or it looks out of date, the wording is softer and says that the tools rebuild first. It is only a suggestion: it never blocks or denies a call, and searching or reading files directly remains fine. It is silent for off, unconfigured and invalid preferences, outside a repository and under `HARNESS_KNOWLEDGE_MODE=off`. It also goes silent after a `knowledge_session` call with `mode: off` in the same session, until `mode: default`. Each agent (subagents separately) gets at most five suggestions per session, and none for 30 minutes after it used a managed graph tool. It never creates `graphify-out` or graph files. Its small per-session counters live in `~/.local/state/grovekeeper/nudge/` (`WORKTREE_KNOWLEDGE_STATE_DIR`) and are removed after a day. Codex runs it only after the user trusts it with `/hooks`; OMP has no shell-command hooks, so no nudge there.
+
 ## Graphify work memory (save-result and reflect)
 
 Upstream Graphify's work-memory loop is available only through the managed tools `learning_save_result` and `learning_reflect` (CLI: `graphify-worktree learning save-result|reflect PATH --input-file FILE`, `-` for stdin). Never run upstream `graphify save-result` or `graphify reflect` directly. The managed tools have the graph tools' gates: graph participation (`graph` or `obsidian` mode, or `allow_once`/`--once` for one operation), session off always wins, and they take the worktree lock and ensure a fresh graph first.
@@ -166,7 +170,7 @@ Install from a grovekeeper checkout (the repository that ships this skill) with 
 
 Every replaced file and any previous non-uv executables are copied into a timestamped backup directory first. `./uninstall.sh` removes the registrations, rules sections and links, and leaves graphs, vaults, memory notes, saved preferences and backups in place. Restart existing harness sessions after installation or upgrades so they launch the new server and reload skills; named OMP profiles need equivalent user MCP configuration. Code-only extraction does not require Codex multi-agent mode.
 
-Machine-specific locations are environment-configurable with the current defaults: `WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT` (`~/Obsidian/Graphify`), `WORKTREE_KNOWLEDGE_MEMORY_VAULT` (`~/Obsidian/Engineering`), `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI` (`~/.local/bin/obsidian`), and `WORKTREE_KNOWLEDGE_SKILL_DIR` (`~/.agents/skills/worktree-knowledge`, used by the installer). Overrides must be absolute or start with `~`. Set them in the environment the harness launches the MCP server with, or every process sees a different vault.
+Machine-specific locations are environment-configurable with the current defaults: `WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT` (`~/Obsidian/Graphify`), `WORKTREE_KNOWLEDGE_MEMORY_VAULT` (`~/Obsidian/Engineering`), `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI` (`~/.local/bin/obsidian`), and `WORKTREE_KNOWLEDGE_SKILL_DIR` (`~/.agents/skills/worktree-knowledge`, used by the installer), and `WORKTREE_KNOWLEDGE_STATE_DIR` (`~/.local/state/grovekeeper`, pre-tool nudge counters). Overrides must be absolute or start with `~`. Set them in the environment the harness launches the MCP server with, or every process sees a different vault.
 
 OMP's Graphify request timeout is 600,000 ms and Codex's `tool_timeout_sec` is 600 to allow full content verification/rebuilds on larger checkouts. Timeout or cancellation is not a fresh result; use source tools or prewarm with CLI `ensure` before retrying. Claude's MCP timeout configuration is unchanged.
 
@@ -197,7 +201,7 @@ CLI exit codes (JSON results go to stdout, operation errors to stderr):
 
 | Code | Meaning |
 |---|---|
-| 0 | Success; `status` fresh; `policy` for any valid state including `unconfigured` and `not_repository`; `recall` always, even on errors or upstream version mismatch |
+| 0 | Success; `status` fresh; `policy` for any valid state including `unconfigured` and `not_repository`; `recall` and `nudge` always, even on errors or upstream version mismatch |
 | 1 | Operation error (invalid memory or learning input, memory storage/lifecycle, failed build, `export --open` registration failure, upstream version mismatch); `hooks` conflict or error (JSON on stdout) |
 | 2 | Usage error |
 | 3 | `status`/`export`: graph stale |

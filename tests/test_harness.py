@@ -352,7 +352,7 @@ SUPERPOWERS = {"matcher": "startup", "hooks": [{"type": "command", "command": "o
 
 def test_session_hook_added_beside_existing_hooks_without_mutating_input():
     data = {"model": "x", "hooks": {"SessionStart": [SUPERPOWERS], "PreToolUse": [{"hooks": []}]}}
-    result = harness.upsert_session_hook(data, RECALL)
+    result = harness.upsert_hook(harness.RECALL_HOOK, data, RECALL)
     assert result == {"model": "x", "hooks": {
         "SessionStart": [SUPERPOWERS, {"matcher": "startup|clear|compact", "hooks": [OURS]}],
         "PreToolUse": [{"hooks": []}]}}
@@ -360,25 +360,25 @@ def test_session_hook_added_beside_existing_hooks_without_mutating_input():
 
 
 def test_session_hook_upsert_is_idempotent_and_repairs_our_entry_in_place():
-    once = harness.upsert_session_hook({}, RECALL)
-    assert harness.upsert_session_hook(once, RECALL) == once
+    once = harness.upsert_hook(harness.RECALL_HOOK, {}, RECALL)
+    assert harness.upsert_hook(harness.RECALL_HOOK, once, RECALL) == once
     drifted = {"hooks": {"SessionStart": [{"matcher": "startup", "hooks": [{**OURS, "timeout": 60}]}, SUPERPOWERS]}}
-    assert harness.upsert_session_hook(drifted, RECALL) == {"hooks": {"SessionStart": [
+    assert harness.upsert_hook(harness.RECALL_HOOK, drifted, RECALL) == {"hooks": {"SessionStart": [
         {"matcher": "startup|clear|compact", "hooks": [OURS]}, SUPERPOWERS]}}
 
 
 def test_session_hook_removal_keeps_other_handlers_and_drops_empty_containers():
     shared = {"matcher": "startup", "hooks": [OURS, {"type": "command", "command": "keep"}]}
     data = {"hooks": {"SessionStart": [shared, SUPERPOWERS]}}
-    assert harness.remove_session_hook(data, RECALL) == {"hooks": {"SessionStart": [
+    assert harness.remove_hook(harness.RECALL_HOOK, data, RECALL) == {"hooks": {"SessionStart": [
         {"matcher": "startup", "hooks": [{"type": "command", "command": "keep"}]}, SUPERPOWERS]}}
-    only_ours = harness.upsert_session_hook({"theme": "dark"}, RECALL)
-    assert harness.remove_session_hook(only_ours, RECALL) == {"theme": "dark"}
+    only_ours = harness.upsert_hook(harness.RECALL_HOOK, {"theme": "dark"}, RECALL)
+    assert harness.remove_hook(harness.RECALL_HOOK, only_ours, RECALL) == {"theme": "dark"}
 
 
 def test_session_hook_removal_leaves_other_installations_alone():
-    other = harness.upsert_session_hook({}, "/elsewhere/graphify-worktree recall")
-    assert harness.remove_session_hook(other, RECALL) == other
+    other = harness.upsert_hook(harness.RECALL_HOOK, {}, "/elsewhere/graphify-worktree recall")
+    assert harness.remove_hook(harness.RECALL_HOOK, other, RECALL) == other
 
 
 def recall_hooks(path):
@@ -430,3 +430,62 @@ def test_session_recall_flag_from_the_command_line(home, tmp_path, checkout, fak
     harness.main(["install", "--repo", str(repo), "--bin-dir", str(bin_dir),
                   "--backup-dir", str(tmp_path / "backup"), "--session-recall", "off"])
     assert recall_hooks(home / ".claude/settings.json") == []
+
+
+# Pre-tool nudge hook -------------------------------------------------------------
+
+NUDGE = "/bin/graphify-worktree nudge"
+NUDGE_MATCHER = "^(Grep|Glob|Read|Bash|mcp__graphify__.*)$"
+
+
+def test_nudge_hook_is_a_pre_tool_use_entry_beside_other_hooks():
+    data = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "guard"}]}]}}
+    result = harness.upsert_hook(harness.NUDGE_HOOK, data, NUDGE)
+    assert result["hooks"]["PreToolUse"] == [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": "guard"}]},
+        {"matcher": NUDGE_MATCHER, "hooks": [{"type": "command", "command": NUDGE, "timeout": 5}]},
+    ]
+    assert harness.upsert_hook(harness.NUDGE_HOOK, result, NUDGE) == result
+    assert harness.remove_hook(harness.NUDGE_HOOK, result, NUDGE) == data
+
+
+def pre_tool_hooks(path):
+    data = json.loads(path.read_text()) if path.exists() else {}
+    return [handler["command"] for group in data.get("hooks", {}).get("PreToolUse", [])
+            for handler in group["hooks"]]
+
+
+def test_nudge_is_registered_only_when_asked_and_independently_of_recall(home, tmp_path, checkout, fake_claude):
+    repo, bin_dir = checkout
+    (home / ".claude").mkdir()
+    (home / ".codex").mkdir()
+    (home / ".omp/agent").mkdir(parents=True)
+    claude, codex = home / ".claude/settings.json", home / ".codex/hooks.json"
+    command = f"{bin_dir}/graphify-worktree nudge"
+    messages = []
+
+    harness.install(repo, bin_dir, tmp_path / "backup", session_recall=True)
+    assert pre_tool_hooks(claude) == [] and pre_tool_hooks(codex) == []
+
+    harness.install(repo, bin_dir, tmp_path / "backup", nudge=True, report=messages.append)
+    assert pre_tool_hooks(claude) == [command] and pre_tool_hooks(codex) == [command]
+    assert recall_hooks(claude) == [f"{bin_dir}/graphify-worktree recall"], "recall untouched"
+    assert any("pre-tool nudge not supported" in line for line in messages if line.startswith("omp"))
+
+    harness.install(repo, bin_dir, tmp_path / "backup", nudge=False)
+    assert pre_tool_hooks(claude) == [] and pre_tool_hooks(codex) == []
+    assert recall_hooks(claude) == [f"{bin_dir}/graphify-worktree recall"]
+
+    harness.install(repo, bin_dir, tmp_path / "backup", nudge=True)
+    harness.uninstall(repo, bin_dir, tmp_path / "uninstall-backup")
+    assert pre_tool_hooks(claude) == [] and recall_hooks(claude) == []
+
+
+def test_nudge_flag_from_the_command_line(home, tmp_path, checkout, fake_claude):
+    repo, bin_dir = checkout
+    (home / ".claude").mkdir()
+    arguments = ["install", "--repo", str(repo), "--bin-dir", str(bin_dir), "--backup-dir", str(tmp_path / "b")]
+    harness.main([*arguments, "--nudge", "on"])
+    assert pre_tool_hooks(home / ".claude/settings.json") == [f"{bin_dir}/graphify-worktree nudge"]
+    harness.main([*arguments, "--nudge", "off"])
+    assert pre_tool_hooks(home / ".claude/settings.json") == []

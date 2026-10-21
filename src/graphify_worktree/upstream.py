@@ -142,6 +142,22 @@ def reflect(*args, **kwargs):
     return reflect(*args, **kwargs)
 
 
+# Hook-guard helpers (pre-tool nudge) -----------------------------------------
+
+def bash_runs_search(command):
+    """Whether a shell command executes grep/rg/find/... (not merely mentions one)."""
+    from graphify.cli import _bash_invokes_search
+
+    return _bash_invokes_search(command)
+
+
+def code_suffixes():
+    """File suffixes code-only extraction indexes (upstream's guard list also has docs)."""
+    from graphify.detect import CODE_EXTENSIONS
+
+    return CODE_EXTENSIONS
+
+
 # MCP -----------------------------------------------------------------------
 
 def mcp_api():

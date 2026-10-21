@@ -23,6 +23,13 @@ case "${WORKTREE_KNOWLEDGE_SESSION_RECALL:-}" in
   0) RECALL=off ;;
   *) fail "WORKTREE_KNOWLEDGE_SESSION_RECALL must be 1 (register) or 0 (remove)" ;;
 esac
+# Opt-in pre-tool nudge hook, same convention.
+case "${WORKTREE_KNOWLEDGE_NUDGE:-}" in
+  "") NUDGE="" ;;
+  1) NUDGE=on ;;
+  0) NUDGE=off ;;
+  *) fail "WORKTREE_KNOWLEDGE_NUDGE must be 1 (register) or 0 (remove)" ;;
+esac
 
 BIN_DIR="$(uv tool dir --bin)"
 TOOL_ENV="$(uv tool dir)/grovekeeper"
@@ -56,7 +63,7 @@ uv export --project "$REPO" --frozen --no-dev --no-hashes --no-emit-project \
 uv tool install --force --reinstall-package grovekeeper --python "$PYTHON" --constraints "$constraints" "$REPO"
 
 "$TOOL_ENV/bin/python" -m graphify_worktree.harness install \
-  --repo "$REPO" --bin-dir "$BIN_DIR" --backup-dir "$BACKUP" ${RECALL:+--session-recall "$RECALL"}
+  --repo "$REPO" --bin-dir "$BIN_DIR" --backup-dir "$BACKUP" ${RECALL:+--session-recall "$RECALL"} ${NUDGE:+--nudge "$NUDGE"}
 
 # Drop only directories this script created and left unused; backed-up trees stay exact.
 rmdir "$BACKUP/bin" 2>/dev/null || true

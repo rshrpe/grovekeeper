@@ -10,6 +10,7 @@ It wraps upstream Graphify rather than replacing it. What it adds:
 - **One graph per worktree, never stale.** Every query checks a full content fingerprint (plus HEAD, branch, scope and Graphify version). It rebuilds under a per-worktree lock when needed and withholds the answer if sources or consent change while it runs. A rebuild is staged in a scratch directory and only a completed, re-verified extraction replaces the owned artifacts, so a failed build keeps the last good graph.
 - **Structural extraction only.** `GRAPHIFY_BACKEND=none` is forced, so ambient API keys can never turn on LLM extraction or labelling.
 - **Optional session-start recall.** Claude Code and Codex can inject a short list of accepted memory titles when a session starts, only in `obsidian` mode and silently otherwise (`WORKTREE_KNOWLEDGE_SESSION_RECALL=1 ./install.sh`).
+- **Optional pre-tool nudge.** Before searches and source reads, Claude Code and Codex can get a short, capped suggestion to try the managed graph tools. It appears only where graph use is allowed, is never a block, and is silent otherwise (`WORKTREE_KNOWLEDGE_NUDGE=1 ./install.sh`).
 - **Generated vs authored knowledge stay apart.** Each worktree exports to its own generated vault. Durable decisions, facts and lessons live as Markdown notes in an authored vault, and are saved only with explicit user approval, with provenance-preserving accept/supersede and no delete.
 
 ## Prerequisites
@@ -61,6 +62,7 @@ The skill is an operational guard on the managed tools, not a filesystem sandbox
 | `WORKTREE_KNOWLEDGE_MEMORY_VAULT` | `~/Obsidian/Engineering` | Authored vault for `Projects/<repo>/Memory` notes |
 | `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI` | `~/.local/bin/obsidian` | Native Obsidian CLI for `export --open` |
 | `WORKTREE_KNOWLEDGE_SKILL_DIR` | `~/.agents/skills/worktree-knowledge` | Where the installer links the skill |
+| `WORKTREE_KNOWLEDGE_STATE_DIR` | `~/.local/state/grovekeeper` | Per-session counters of the optional pre-tool nudge |
 | `HARNESS_KNOWLEDGE_MODE` | `default` | `off` disables knowledge for the process |
 
 Values must be absolute or start with `~`. Set vault overrides in the environment your harness starts the MCP server with, so the CLI and the server agree.
@@ -113,6 +115,7 @@ src/graphify_worktree/
   guard.py            guarded_graph/ensure: fresh graph in, result withheld if anything moved
   obsidian_export.py  generated vault export and `export --open`
   recall.py           session-start hook: accepted memory titles, silent unless obsidian mode
+  nudge.py            pre-tool hook: capped, advisory graph suggestion, silent unless graph consent
   learning.py         upstream save-result/reflect work memory behind the graph gates
   memory/schema.py    the memory action registry (validation, CLI, MCP schemas)
   memory/store.py     note format and safe file I/O

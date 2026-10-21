@@ -9,6 +9,7 @@ SETTINGS = [
     (settings.memory_vault, "WORKTREE_KNOWLEDGE_MEMORY_VAULT", "Obsidian/Engineering"),
     (settings.obsidian_cli, "WORKTREE_KNOWLEDGE_OBSIDIAN_CLI", ".local/bin/obsidian"),
     (settings.skill_dir, "WORKTREE_KNOWLEDGE_SKILL_DIR", ".agents/skills/worktree-knowledge"),
+    (lambda: settings.state_dir(), "WORKTREE_KNOWLEDGE_STATE_DIR", ".local/state/grovekeeper"),
 ]
 
 

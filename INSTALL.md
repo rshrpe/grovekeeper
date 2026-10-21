@@ -26,6 +26,7 @@ Options, all through the environment:
 - `WORKTREE_KNOWLEDGE_BACKUP_DIR` sets where to keep copies of replaced files (default `~/.local/share/grovekeeper/backups/<UTC timestamp>`).
 - `WORKTREE_KNOWLEDGE_SKILL_DIR` sets where to link the skill (default `~/.agents/skills/worktree-knowledge`).
 - `UV_TOOL_DIR` / `UV_TOOL_BIN_DIR` are uv's own locations for tool environments and executables.
+- `WORKTREE_KNOWLEDGE_NUDGE=1` registers the optional pre-tool nudge hook; `=0` removes it; unset leaves it as it is.
 - `WORKTREE_KNOWLEDGE_SESSION_RECALL=1` registers the optional session-start recall hook; `=0` removes it. Unset (the default) leaves it as it is, so a plain re-install never adds or removes it.
 
 ## 3. What the installer changes
@@ -38,7 +39,8 @@ Options, all through the environment:
    - OMP: `mcpServers.graphify` in `~/.omp/agent/mcp.json` with `"type": "stdio"` and `"timeout": 600000`.
 4. **Global agent rules.** The "Worktree knowledge" section is rendered from `harness/worktree-knowledge.md` into `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` (level-1 heading, skill path) and `~/.omp/agent/RULES.md` (level-2 heading, `skill://worktree-knowledge`). It sits between `<!-- worktree-knowledge:start -->` and `<!-- worktree-knowledge:end -->` markers. An existing unmarked "Worktree knowledge" section is adopted and replaced, and everything else in those files is left alone.
 5. **Session-start recall hook (only with `WORKTREE_KNOWLEDGE_SESSION_RECALL=1`).** A `SessionStart` hook (matcher `startup|clear|compact`, timeout 5 s) runs `graphify-worktree recall`. Claude Code: added to `hooks.SessionStart` in `~/.claude/settings.json`, beside any other hooks there. Codex: added to `~/.codex/hooks.json`; Codex skips it until you trust it once with `/hooks` in a Codex session. OMP: not registered, because OMP has no shell-command hooks (its hooks are TypeScript extensions). The hook prints accepted memory titles only in `obsidian` mode and is silent otherwise; both harnesses treat a failing or slow hook as non-blocking. `=0` removes only the hook entry that runs this installation's `graphify-worktree recall`.
-6. **Global Git ignore.** `graphify-out/` is added to `core.excludesFile` (or `~/.config/git/ignore`) if it is not already listed. Graphs are never committed and repository ignore files are never edited.
+6. **Pre-tool nudge hook (only with `WORKTREE_KNOWLEDGE_NUDGE=1`).** A `PreToolUse` hook (matcher `^(Grep|Glob|Read|Bash|mcp__graphify__.*)$`, timeout 5 s) runs `graphify-worktree nudge` in the same two files as the recall hook (Claude Code `~/.claude/settings.json`, Codex `~/.codex/hooks.json`, trusted once with `/hooks`). It is not registered for OMP. It only ever adds advisory context: it never returns a permission decision, always exits 0, and both harnesses treat a failing or slow hook as non-blocking. It costs one short Python process per matched tool call, about 50 ms when the call is not a search and about 90 ms when it is. `=0` removes only the entry that runs this installation's `graphify-worktree nudge`.
+7. **Global Git ignore.** `graphify-out/` is added to `core.excludesFile` (or `~/.config/git/ignore`) if it is not already listed. Graphs are never committed and repository ignore files are never edited.
 
 Every file the installer rewrites is first copied to `<backup>/files/<path relative to HOME>`. Re-running the installer changes nothing when everything is current.
 
@@ -68,7 +70,7 @@ graphify-worktree hooks uninstall /path/to/repo
 ./uninstall.sh
 ```
 
-This removes the rules sections, MCP registrations and session-start recall hooks (only entries pointing at this tool), the skill links (only links pointing at this checkout) and the uv tool. It leaves `graphify-out/` graphs, generated and authored vaults, memory notes, saved `harness.knowledgeMode` preferences, the global ignore line and all backups.
+This removes the rules sections, MCP registrations and the recall and nudge hooks (only entries pointing at this tool), the skill links (only links pointing at this checkout) and the uv tool. It leaves `graphify-out/` graphs, generated and authored vaults, memory notes, saved `harness.knowledgeMode` preferences, the global ignore line and all backups.
 
 ## 7. Roll back to a previous setup
 

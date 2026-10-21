@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from graphify_worktree import artifacts, errors, upstream
-from graphify_worktree import hooks, learning, recall
+from graphify_worktree import hooks, learning, nudge, recall
 from graphify_worktree.errors import PolicyError
 from graphify_worktree.freshness import inspect
 from graphify_worktree.guard import ensure
@@ -27,7 +27,7 @@ def parser():
     parser = argparse.ArgumentParser(
         prog="graphify-worktree",
         description="Local code-only Graphify graphs and isolated generated Obsidian vaults per Git worktree.",
-        epilog="Exit codes: 0 success/fresh, 1 operation error, 2 usage error, 3 stale, 4 missing, 5 policy denied, 130 interrupted; recall always 0. No LLM, daemon or global graph merge.",
+        epilog="Exit codes: 0 success/fresh, 1 operation error, 2 usage error, 3 stale, 4 missing, 5 policy denied, 130 interrupted; recall and nudge always 0. No LLM, daemon or global graph merge.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     policy_parser = commands.add_parser("policy", help="read repository knowledge preference without inspecting artifacts")
@@ -52,7 +52,19 @@ def parser():
     hooks.add_parser(commands)
     recall_parser = commands.add_parser("recall", help="session-start hook: print accepted memory titles in obsidian mode; otherwise silent; always exits 0")
     recall_parser.add_argument("path", nargs="?", default=".")
+    commands.add_parser("nudge", help="pre-tool hook: read the harness payload on stdin and maybe suggest graph tools (graph consent only); always exits 0")
     return parser
+
+
+def run_nudge(stdin):
+    """A tool call must never fail or be blocked because of the nudge."""
+    try:
+        text = nudge.respond(json.load(stdin))
+    except Exception:
+        return 0
+    if text:
+        print(text)
+    return 0
 
 
 def run_recall(path):
@@ -80,6 +92,8 @@ def main(argv=None):
         return hooks.run(arguments)
     if arguments.command == "recall":
         return run_recall(arguments.path)
+    if arguments.command == "nudge":
+        return run_nudge(sys.stdin)
     if arguments.command == "policy":
         try:
             policy = get_policy(arguments.path)
@@ -133,9 +147,9 @@ def report(error):
 
 def entrypoint():
     try:
-        # recall uses no upstream API and runs from session-start hooks, which
-        # must keep working (silently) even when the pins are broken.
-        if sys.argv[1:2] != ["recall"]:
+        # Hook commands run on every session start or tool call and must never
+        # fail it, so they skip the pin check and fall silent on their own errors.
+        if sys.argv[1:2] not in (["recall"], ["nudge"]):
             upstream.assert_versions()
         code = main()
     except KeyboardInterrupt:

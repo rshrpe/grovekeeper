@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Added in Phase 3: consent-aware pre-tool nudge (needs sign-off)
+- **`graphify-worktree nudge`** reads a Claude Code or Codex `PreToolUse` payload on stdin. It is modelled on upstream `graphify hook-guard` and is advisory only.
+  - **When it speaks:** before a search (Grep, Glob, or a Bash command that actually runs grep/rg/find/fd/ag/...; upstream's own parser through `upstream.py`) or a Read of a source file that code-only extraction indexes (upstream's code extensions, not its docs list), it may add `additionalContext` suggesting the managed graph tools with the worktree's `project_path`.
+  - **Softer when stale:** the wording is softer when no graph is built or it looks out of date (HEAD or branch moved, Git event marker, or the read file is newer than the build). These checks are cheap: no lock, no content scan.
+  - **Never strict:** it never returns a permission decision, never says "mandatory", and always exits 0 (exempt from the version-pin refusal, like `recall`).
+- **Consent:** silent unless the effective mode is `graph` or `obsidian`: unconfigured, off, invalid, non-repository and `HARNESS_KNOWLEDGE_MODE=off` are silent. It observes `mcp__graphify__knowledge_session` calls, so an MCP session opt-out silences it until `mode: default`.
+- **Budget, as upstream:** at most 5 per agent per session (session id plus `agent_id`, so subagents count separately), and silent for 1800 s after that agent called a managed graph tool. Without a session id it is silent.
+- **Fail-open:** malformed payloads, a busy or unwritable state file, or any error mean silence.
+- **Where its state lives:** `~/.local/state/grovekeeper/nudge/`, set by the new `WORKTREE_KNOWLEDGE_STATE_DIR`, cleaned after 24 h. Unlike upstream it never writes into the repository and never creates `graphify-out`.
+- **Opt-in registration:** `WORKTREE_KNOWLEDGE_NUDGE=1 ./install.sh` (or `--nudge on`) adds a `PreToolUse` hook (matcher `^(Grep|Glob|Read|Bash|mcp__graphify__.*)$`, timeout 5 s) to `~/.claude/settings.json` and `~/.codex/hooks.json`. `=0` removes it, and unset leaves it unchanged. `uninstall.sh` removes it. Not registered for OMP, which has no shell-command hooks.
+- **Cost:** measured with process start, about 50 ms per non-search call and about 90 ms per nudge-eligible call.
+- Internal: the installer's hook helpers are now one generic `HookSpec`-based pair (`upsert_hook`/`remove_hook`) shared by the recall and nudge hooks. Recall registration is unchanged.
+
 ### Added in Phase 3: upstream work memory (needs sign-off)
 - **`learning_save_result` and `learning_reflect` MCP tools; `graphify-worktree learning save-result|reflect PATH --input-file FILE [--once]`.** They route upstream `graphify save-result` and `reflect --if-stale` (called in-process through `upstream.py`) behind the graph tools' gates: graph consent or `allow_once`/`--once`, session off wins, worktree lock, fresh graph ensured first. Both are writes and require `confirmed: true` plus a `confirmation`. Saving a result also refreshes the lessons. Reflect skips when `LESSONS.md` is newer than the saved results and the graph and the overlay exists.
 - Work memory is per worktree: `graphify-out/memory/`, `graphify-out/reflections/LESSONS.md`, `graphify-out/.graphify_learning.json`. Writes refuse symlinked paths. A test verifies that publishing a rebuilt graph leaves all three byte- and mtime-identical.

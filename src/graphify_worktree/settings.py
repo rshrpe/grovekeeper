@@ -38,3 +38,8 @@ def obsidian_cli():
 def skill_dir():
     """Where the installer links the worktree-knowledge skill for all harnesses."""
     return _path("WORKTREE_KNOWLEDGE_SKILL_DIR", ".agents/skills/worktree-knowledge")
+
+
+def state_dir():
+    """Small per-user runtime state (session nudge budgets); never inside a repository."""
+    return _path("WORKTREE_KNOWLEDGE_STATE_DIR", ".local/state/grovekeeper")

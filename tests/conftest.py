@@ -8,7 +8,8 @@ def home(tmp_path, monkeypatch):
     path.mkdir()
     monkeypatch.setenv("HOME", str(path))
     for name in ("WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT", "WORKTREE_KNOWLEDGE_MEMORY_VAULT",
-                 "WORKTREE_KNOWLEDGE_OBSIDIAN_CLI", "WORKTREE_KNOWLEDGE_SKILL_DIR"):
+                 "WORKTREE_KNOWLEDGE_OBSIDIAN_CLI", "WORKTREE_KNOWLEDGE_SKILL_DIR",
+                 "WORKTREE_KNOWLEDGE_STATE_DIR"):
         monkeypatch.delenv(name, raising=False)
     # Keep `git config --global` and XDG lookups inside the temporary HOME.
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
