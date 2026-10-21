@@ -9,8 +9,8 @@ import sys
 import threading
 from tempfile import TemporaryDirectory
 
-from graphify_worktree import upstream
-from graphify_worktree.errors import KnowledgeError, MemoryRequestError, PolicyError
+from graphify_worktree import learning, upstream
+from graphify_worktree.errors import KnowledgeError, LearningRequestError, MemoryRequestError, PolicyError
 from graphify_worktree.guard import guarded_graph
 from graphify_worktree.memory import handle as handle_memory
 from graphify_worktree.memory.schema import ACTIONS as MEMORY_ACTIONS, GRAPH_REQUEST
@@ -139,6 +139,12 @@ def build_server():
                 input_schema=action.input_schema(),
                 annotations=types.ToolAnnotations(read_only_hint=action.read_only),
             ))
+        learning_tools = [types.Tool(
+            name=f"learning_{action.name}",
+            description=action.mcp_description(),
+            input_schema=action.input_schema(),
+            annotations=types.ToolAnnotations(read_only_hint=action.read_only),
+        ) for action in learning.ACTIONS.values()]
         listed.tools.append(types.Tool(
             name="knowledge_session",
             description="Disable graph and project-memory knowledge for this MCP process, or restore saved repository policy. Never changes saved preferences; cannot override environment off.",
@@ -149,6 +155,7 @@ def build_server():
                 "additionalProperties": False,
             },
         ))
+        listed.tools.extend(learning_tools)
         return listed
 
     def call_memory(action, arguments, cancelled):
@@ -165,6 +172,20 @@ def build_server():
             return result({"error": "invalid_memory_request", "reason": str(error)}, error=True)
         except Exception as error:
             return result({"error": "memory_operation_failed", "reason": str(error)}, error=True)
+
+    def call_learning(action, arguments, cancelled):
+        # Upstream work memory: the graph tools' gates, plus write approval.
+        try:
+            root, once = request_root(arguments)
+            arguments.pop("project_path")
+            return result(learning.handle(action, root, arguments, once=once,
+                                          session_mode=session_off, cancelled=cancelled))
+        except (PolicyError, InvalidRequest) as error:
+            return denied(error)
+        except LearningRequestError as error:
+            return result({"error": "invalid_learning_request", "reason": str(error)}, error=True)
+        except Exception as error:
+            return result({"error": "graph_unavailable", "reason": str(error)}, error=True)
 
     def call_graph(ctx, params, arguments, cancelled):
         try:
@@ -199,6 +220,8 @@ def build_server():
             })
         if params.name.startswith("memory_"):
             work = lambda cancelled: call_memory(params.name.removeprefix("memory_"), arguments, cancelled)
+        elif params.name.removeprefix("learning_") in learning.ACTIONS and params.name.startswith("learning_"):
+            work = lambda cancelled: call_learning(params.name.removeprefix("learning_"), arguments, cancelled)
         else:
             if tool_names is None:
                 listed = await upstream_list(ctx, None)

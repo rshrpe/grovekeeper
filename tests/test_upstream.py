@@ -51,3 +51,12 @@ def test_only_upstream_module_imports_graphify_or_mcp():
         if path.name != "upstream.py" and {"graphify", "mcp"} & set(_imported_roots(path))
     }
     assert offenders == set()
+
+
+def test_work_memory_constants_mirror_upstream():
+    from graphify.ingest import OUTCOMES
+    from graphify.reflect import LEARNING_SIDECAR_NAME
+
+    from graphify_worktree import learning
+    assert learning.OUTCOMES == OUTCOMES
+    assert upstream.LEARNING_SIDECAR == LEARNING_SIDECAR_NAME

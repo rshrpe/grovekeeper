@@ -622,5 +622,121 @@
       "type": "object"
     },
     "name": "knowledge_session"
+  },
+  {
+    "annotations": {
+      "read_only_hint": false
+    },
+    "description": "Requires graph project consent (graph or obsidian mode). Record a graph answer and how it worked out in this worktree's Graphify work memory, then refresh its lessons so query_graph marks the cited nodes with learning=. Only after explicit user approval to record it.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_once": {
+          "default": false,
+          "description": "Explicit permission for this operation only, not enrollment. Session off always wins.",
+          "type": "boolean"
+        },
+        "answer": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "confirmation": {
+          "description": "Context identifying the user's explicit approval; not a model-generated claim of permission.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "confirmed": {
+          "const": true,
+          "description": "Must be true only after actual explicit user approval of this exact content or transition. Never infer approval.",
+          "type": "boolean"
+        },
+        "correction": {
+          "description": "What the right answer was (with outcome corrected).",
+          "minLength": 1,
+          "type": "string"
+        },
+        "nodes": {
+          "description": "Graph node labels or ids the answer relied on.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "type": "array"
+        },
+        "outcome": {
+          "enum": [
+            "useful",
+            "dead_end",
+            "corrected"
+          ],
+          "type": "string"
+        },
+        "project_path": {
+          "description": "Required exact absolute canonical Git worktree root; never a subdirectory or default checkout.",
+          "type": "string"
+        },
+        "question": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "default": "query",
+          "enum": [
+            "query",
+            "path_query",
+            "explain"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_path",
+        "question",
+        "answer",
+        "confirmed",
+        "confirmation"
+      ],
+      "type": "object"
+    },
+    "name": "learning_save_result"
+  },
+  {
+    "annotations": {
+      "read_only_hint": false
+    },
+    "description": "Requires graph project consent (graph or obsidian mode). Regenerate this worktree's lessons and learning overlay from its saved results if they are out of date. Deterministic and local; only after explicit user approval.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_once": {
+          "default": false,
+          "description": "Explicit permission for this operation only, not enrollment. Session off always wins.",
+          "type": "boolean"
+        },
+        "confirmation": {
+          "description": "Context identifying the user's explicit approval; not a model-generated claim of permission.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "confirmed": {
+          "const": true,
+          "description": "Must be true only after actual explicit user approval of this exact content or transition. Never infer approval.",
+          "type": "boolean"
+        },
+        "project_path": {
+          "description": "Required exact absolute canonical Git worktree root; never a subdirectory or default checkout.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_path",
+        "confirmed",
+        "confirmation"
+      ],
+      "type": "object"
+    },
+    "name": "learning_reflect"
   }
 ]

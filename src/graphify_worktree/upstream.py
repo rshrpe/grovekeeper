@@ -119,6 +119,29 @@ def to_obsidian(*args, **kwargs):
     return to_obsidian(*args, **kwargs)
 
 
+# Work memory (save-result / reflect) ----------------------------------------
+
+LEARNING_SIDECAR = ".graphify_learning.json"  # graphify.reflect.LEARNING_SIDECAR_NAME
+
+
+def save_query_result(**kwargs):
+    from graphify.ingest import save_query_result
+
+    return save_query_result(**kwargs)
+
+
+def lessons_fresh(*args, **kwargs):
+    from graphify.reflect import lessons_fresh
+
+    return lessons_fresh(*args, **kwargs)
+
+
+def reflect(*args, **kwargs):
+    from graphify.reflect import reflect
+
+    return reflect(*args, **kwargs)
+
+
 # MCP -----------------------------------------------------------------------
 
 def mcp_api():
@@ -137,14 +160,37 @@ def upstream_server(graph_path):
     instead of vendoring Graphify's schemas, dispatch table, graph cache, or
     query implementations.
     """
-    from graphify.serve import _build_server
+    from graphify import serve
 
-    server = _build_server(graph_path)
+    _keep_learning_overlay_when_filtering(serve)
+    server = serve._build_server(graph_path)
     return SimpleNamespace(
         version=server.version,
         list_tools=server._request_handlers["tools/list"].handler,
         call_tool=server._request_handlers["tools/call"].handler,
     )
+
+
+def _keep_learning_overlay_when_filtering(serve):
+    """query_graph drops the work-memory overlay when a context filter applies.
+
+    _filter_graph_by_context builds a fresh graph and copies nodes and edges but
+    not the graph attributes the overlay is stored in, so any question that
+    implies a filter ("who calls ...") loses its learning= annotations. Carry
+    that one attribute over; everything else upstream does is unchanged.
+    """
+    original = serve._filter_graph_by_context
+    if getattr(original, "keeps_learning_overlay", False):
+        return
+
+    def filtered(graph, context_filters):
+        result = original(graph, context_filters)
+        if result is not graph and "_learning_overlay" in graph.graph:
+            result.graph["_learning_overlay"] = graph.graph["_learning_overlay"]
+        return result
+
+    filtered.keeps_learning_overlay = True
+    serve._filter_graph_by_context = filtered
 
 
 def filter_blank_stdin():

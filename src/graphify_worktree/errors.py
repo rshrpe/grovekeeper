@@ -34,6 +34,10 @@ class MemoryRequestError(KnowledgeError):
     """Invalid memory input, lifecycle transition, note or storage."""
 
 
+class LearningRequestError(KnowledgeError):
+    """Invalid work-memory (save-result/reflect) input."""
+
+
 class HookError(KnowledgeError):
     pass
 

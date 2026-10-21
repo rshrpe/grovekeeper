@@ -112,6 +112,14 @@ The managed server proxies all ten upstream Graphify tools: `query_graph`, `get_
 
 The managed server requires an explicit canonical worktree root, checks participation before graph access, ensures freshness, and exposes no default-graph resources. If MCP is unavailable, use ordinary source tools instead of starting the unguarded upstream server. Graph tools may rebuild local derived data; do not describe them as guaranteed read-only. Existing authored memory remains separate.
 
+## Graphify work memory (save-result and reflect)
+
+Upstream Graphify's work-memory loop is available only through the managed tools `learning_save_result` and `learning_reflect` (CLI: `graphify-worktree learning save-result|reflect PATH --input-file FILE`, `-` for stdin). Never run upstream `graphify save-result` or `graphify reflect` directly. The managed tools have the graph tools' gates: graph participation (`graph` or `obsidian` mode, or `allow_once`/`--once` for one operation), session off always wins, and they take the worktree lock and ensure a fresh graph first.
+
+Both are writes. After a graph answer proved useful, a dead end, or wrong, propose recording it: `question`, `answer`, optional cited `nodes` (labels or ids, at most 10), optional `outcome` (`useful`, `dead_end` or `corrected`) and `correction`, and `type` (`query` by default, `path_query`, `explain`). Save only after the user explicitly approves, with `confirmed: true` and a `confirmation` describing that approval. Saving also refreshes the lessons. `learning_reflect` (same approval fields) regenerates them only when they are out of date, for example after a rebuild.
+
+Results live per worktree in `graphify-out/memory/`, lessons in `graphify-out/reflections/LESSONS.md` and the overlay in `graphify-out/.graphify_learning.json`. Publishing a new graph never touches them. They are local and uncommitted, and separate from shared Obsidian memory: durable decisions, facts and lessons still go through the memory workflow above. Managed `query_graph` then marks nodes with `learning=preferred`, `tentative` or `contested`, with `:stale` when the node's source file changed since. These are hints from earlier sessions, not facts: re-verify before relying on them, always for `:stale`.
+
 ## Optional Git event integration
 
 Install only when explicitly requested for an opted-in repository; enabling a knowledge mode does not install hooks:
@@ -190,7 +198,7 @@ CLI exit codes (JSON results go to stdout, operation errors to stderr):
 | Code | Meaning |
 |---|---|
 | 0 | Success; `status` fresh; `policy` for any valid state including `unconfigured` and `not_repository`; `recall` always, even on errors or upstream version mismatch |
-| 1 | Operation error (invalid memory input/storage/lifecycle, failed build, `export --open` registration failure, upstream version mismatch); `hooks` conflict or error (JSON on stdout) |
+| 1 | Operation error (invalid memory or learning input, memory storage/lifecycle, failed build, `export --open` registration failure, upstream version mismatch); `hooks` conflict or error (JSON on stdout) |
 | 2 | Usage error |
 | 3 | `status`/`export`: graph stale |
 | 4 | `status`/`export`: graph missing |
@@ -207,6 +215,7 @@ MCP tool errors set `is_error` and return JSON with an `error` code and `reason`
 | `graph_unavailable` | Build/freshness failure, or sources/provenance changed during the query; result withheld |
 | `invalid_memory_request` | Memory input, `project_path`, lifecycle or storage validation failed |
 | `memory_operation_failed` | Unexpected memory I/O or runtime failure |
+| `invalid_learning_request` | `learning_*` input or approval fields failed validation (consent and graph failures use the codes above) |
 | `unknown_tool` | The tool name is not offered by this server |
 
 Installation verification also exercises real OMP, Claude Code, and Codex sessions and the Obsidian native UI; the disposable smokes alone do not establish harness authentication or desktop availability. The managed server and the smoke client target the MCP 2 Python SDK (`Tool.input_schema`, `CallToolResult.is_error`); MCP 1.x field names are not supported.

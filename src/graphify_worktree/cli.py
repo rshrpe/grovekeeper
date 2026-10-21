@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from graphify_worktree import artifacts, errors, upstream
-from graphify_worktree import hooks, recall
+from graphify_worktree import hooks, learning, recall
 from graphify_worktree.errors import PolicyError
 from graphify_worktree.freshness import inspect
 from graphify_worktree.guard import ensure
@@ -48,6 +48,7 @@ def parser():
     for command_parser in (refresh_parser, status_parser, ensure_parser, export_parser):
         command_parser.add_argument("--once", action="store_true", help="permit only this operation without changing repository preference; session off still wins")
     memory_schema.add_parser(commands)
+    learning.add_parser(commands)
     hooks.add_parser(commands)
     recall_parser = commands.add_parser("recall", help="session-start hook: print accepted memory titles in obsidian mode; otherwise silent; always exits 0")
     recall_parser.add_argument("path", nargs="?", default=".")
@@ -71,6 +72,9 @@ def main(argv=None):
         result = handle_memory(arguments.memory_action, arguments.path,
                                memory_schema.payload_from_cli(arguments), once=arguments.once)
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    if arguments.command == "learning":
+        emit(learning.run(arguments, sys.stdin))
         return 0
     if arguments.command == "hooks":
         return hooks.run(arguments)

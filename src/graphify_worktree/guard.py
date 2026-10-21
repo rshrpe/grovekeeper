@@ -11,7 +11,7 @@ from graphify_worktree.publish import refresh
 
 
 @contextmanager
-def guarded_graph(root, *, once=False, session_mode=None, cancelled=None):
+def guarded_graph(root, *, once=False, session_mode=None, cancelled=None, verify=True):
     """Ensure a fresh graph under the worktree lock, then validate the caller's read.
 
     Consent is checked at each boundary where it could have changed: before
@@ -22,6 +22,8 @@ def guarded_graph(root, *, once=False, session_mode=None, cancelled=None):
 
     session_mode may be a provider so an in-flight MCP session opt-out is seen.
     cancelled is an optional threading.Event that aborts at the next boundary.
+    verify=False skips the after-read re-inspection: it exists to withhold a
+    read result, and is meaningless after a write that has already happened.
     """
     def authorize():
         if cancelled is not None and cancelled.is_set():
@@ -40,6 +42,8 @@ def guarded_graph(root, *, once=False, session_mode=None, cancelled=None):
         expected = Generation.of(status)
         authorize()
         yield {**status, "rebuilt": rebuilt}
+        if not verify:
+            return
         with artifacts.workspace(output) as scratch:
             current = inspect(root, output, scratch)
         authorize()
