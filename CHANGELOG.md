@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
+
 ### Added
 - Project and package name **grovekeeper** (uv tool `grovekeeper`, backups under `~/.local/share/grovekeeper/`). The skill (`worktree-knowledge`), the commands (`graphify-worktree`, `graphify-worktree-mcp`), the MCP server id (`graphify`), the environment variables (`WORKTREE_KNOWLEDGE_*`) and the rules markers are unchanged. `install.sh` removes a uv tool installed under the earlier name `worktree-knowledge` before installing. Git hooks installed while the tool had that name fall back to running only the original hook until `hooks install` is re-run.
 - GitHub Actions CI: unit and integration tests on Ubuntu and macOS with Python 3.11 and 3.12.

@@ -43,7 +43,9 @@ constraints="$(mktemp)"
 trap 'rm -f "$constraints"' EXIT
 uv export --project "$REPO" --frozen --no-dev --no-hashes --no-emit-project \
   --format requirements-txt --output-file "$constraints" >/dev/null
-uv tool install --force --python "$PYTHON" --constraints "$constraints" "$REPO"
+# uv reuses a cached wheel of a local project until pyproject.toml changes;
+# rebuild this package every time so source changes are never silently skipped.
+uv tool install --force --reinstall-package grovekeeper --python "$PYTHON" --constraints "$constraints" "$REPO"
 
 "$TOOL_ENV/bin/python" -m graphify_worktree.harness install \
   --repo "$REPO" --bin-dir "$BIN_DIR" --backup-dir "$BACKUP"
