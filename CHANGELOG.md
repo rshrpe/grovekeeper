@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Added in Phase 3: `export --wiki` (needs sign-off)
+- **`graphify-worktree export PATH --wiki`** also writes upstream Graphify's wiki (`graphify.wiki.to_wiki`, through `upstream.py`) to `_graphify-worktree/wiki/` in the worktree's generated vault.
+  - It produces `index.md` plus one article per community and per hub (god) node, with relative Markdown links that resolve inside that folder.
+  - It has the same gates as `export`: Obsidian consent and a fresh graph. A stale or missing graph exports nothing, wiki included.
+  - It never writes the authored vault.
+  - The result adds `wiki_path` and `wiki_articles`.
+- **Upstream owns `wiki/` outright** and deletes pages it didn't produce, so the wiki gets its own directory. A symlinked `wiki/` is refused by every export.
+- **Without `--wiki`**, export is unchanged except that it removes the `.md` pages of a wiki left by an earlier `--wiki` export (and the folder if nothing else is in it), so a stale wiki never sits beside a fresh export. This only affects vaults where `--wiki` was used.
+
 ### Added in Phase 3: memory dashboard (needs sign-off)
 - **`graphify-worktree dashboard PATH [--once]`** writes `Projects/<repository>/Memory.base` in the authored memory vault, beside that repository's `Memory/` folder. Bases only query notes in their own vault.
   - It is scoped with `file.inFolder("Projects/<repository>/Memory")` and has five table views: Current (grouped by status), By kind, Proposals by branch, Needs review (a `review` formula over `verify_by`/`stale_after`), and History (superseded).

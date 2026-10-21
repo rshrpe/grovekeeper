@@ -45,6 +45,7 @@ def parser():
     export_parser = commands.add_parser("export", help="export only a fresh graph to its unique generated vault")
     export_parser.add_argument("path", nargs="?", default=".")
     export_parser.add_argument("--open", action="store_true", help="register the generated vault and open its report in Obsidian")
+    export_parser.add_argument("--wiki", action="store_true", help="also write upstream wiki articles to _graphify-worktree/wiki/ in the generated vault")
     for command_parser in (refresh_parser, status_parser, ensure_parser, export_parser):
         command_parser.add_argument("--once", action="store_true", help="permit only this operation without changing repository preference; session off still wins")
     memory_schema.add_parser(commands)
@@ -128,7 +129,7 @@ def main(argv=None):
                      | {"code_files": status["code_files"], "vault_path": status["vault_path"]})
                 return 0
             if arguments.command == "export":
-                result = export(root, output, scratch)
+                result = export(root, output, scratch, wiki=arguments.wiki)
                 emit(result)
                 if result["state"] != "exported":
                     return STATE_EXIT[result["state"]]

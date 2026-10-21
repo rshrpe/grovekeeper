@@ -113,6 +113,18 @@ def to_canvas(*args, **kwargs):
     return to_canvas(*args, **kwargs)
 
 
+def to_wiki(*args, **kwargs):
+    from graphify.wiki import to_wiki
+
+    return to_wiki(*args, **kwargs)
+
+
+def god_nodes(graph):
+    from graphify.analyze import god_nodes
+
+    return god_nodes(graph)
+
+
 def to_obsidian(*args, **kwargs):
     from graphify.export import to_obsidian
 

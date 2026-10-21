@@ -78,6 +78,7 @@ graphify-worktree configure graph .        # save a mode for the repository
 graphify-worktree ensure .                 # build or reuse a fresh graph
 graphify-worktree status .                 # 0 fresh, 3 stale, 4 missing, 5 denied
 graphify-worktree export . --open          # obsidian mode: generated vault
+graphify-worktree export . --wiki          # ... plus upstream's wiki articles in _graphify-worktree/wiki/
 graphify-worktree memory search . --query "retry policy"
 graphify-worktree recall .                 # what the optional session-start hook injects (obsidian mode only)
 graphify-worktree dashboard .              # obsidian mode: Obsidian Bases view of this repository's memory notes

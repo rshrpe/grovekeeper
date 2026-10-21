@@ -67,10 +67,14 @@ def export_canvas(vault, graph, communities, labels):
     return mode
 
 
-def export(root, output, scratch):
+def export(root, output, scratch, *, wiki=False):
     """Write the fresh graph into its own generated vault; returns the result JSON.
 
     A graph that is not fresh is not exported: its status is returned instead.
+    wiki=True also writes upstream's wiki articles to _graphify-worktree/wiki/,
+    a directory upstream owns outright (it deletes pages it did not produce).
+    Without it, a wiki left by an earlier export is removed rather than left
+    stale beside a fresh export.
     """
     status = inspect(root, output, scratch)
     if status["state"] != "fresh":
@@ -109,6 +113,23 @@ def export(root, output, scratch):
     if (report_dir / "GRAPH_REPORT.md").is_symlink():
         raise GraphError("vault report must not be a symlink")
     shutil.copyfile(output / "GRAPH_REPORT.md", report_dir / "GRAPH_REPORT.md")
+    wiki_dir = report_dir / "wiki"
+    if wiki_dir.is_symlink():
+        raise GraphError("generated wiki directory must not be a symlink")
+    articles = None
+    if wiki:
+        try:
+            articles = upstream.to_wiki(graph, communities, str(wiki_dir), community_labels=labels, cohesion=cohesion,
+                                        god_nodes_data=analysis.get("gods") or upstream.god_nodes(graph))
+        except ValueError as error:
+            raise GraphError(f"wiki export failed: {error}") from error
+    elif wiki_dir.is_dir():
+        for page in wiki_dir.glob("*.md"):
+            page.unlink()
+        try:
+            wiki_dir.rmdir()
+        except OSError:
+            pass  # something else lives there; it is not ours to remove
     # Native exporter tracks and prunes only its generated files; it preserves
     # authored notes and .obsidian settings in this already-owned vault.
     provenance = artifacts.load_json(output / artifacts.PROVENANCE)
@@ -121,7 +142,10 @@ def export(root, output, scratch):
         os.replace(temporary, marker)
     finally:
         Path(temporary).unlink(missing_ok=True)
-    return {"state": "exported", "vault_path": str(vault), "canvas_mode": canvas_mode}
+    result = {"state": "exported", "vault_path": str(vault), "canvas_mode": canvas_mode}
+    if wiki:
+        result.update(wiki_path=str(wiki_dir), wiki_articles=articles)
+    return result
 
 
 def open_in_obsidian(vault):
