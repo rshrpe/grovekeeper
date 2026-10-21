@@ -1,0 +1,35 @@
+[project]
+name = "worktree-knowledge"
+version = "0.1.0"
+description = "Consent-gated, per-worktree Graphify graphs and shared Obsidian project memory for coding agents (Claude Code, Codex, OMP)."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = [
+    "graphifyy[mcp,sql]==0.9.93",
+    "mcp==2.3.0",
+]
+classifiers = [
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+graphify-worktree = "graphify_worktree.cli:entrypoint"
+graphify-worktree-mcp = "graphify_worktree.mcp_server:entrypoint"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.10"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "graphify_worktree"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
