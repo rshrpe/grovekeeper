@@ -42,6 +42,8 @@ uv tool install --force --python "$PYTHON" --constraints "$constraints" "$REPO"
 "$TOOL_ENV/bin/python" -m graphify_worktree.harness install \
   --repo "$REPO" --bin-dir "$BIN_DIR" --backup-dir "$BACKUP"
 
-find "$BACKUP" -depth -type d -empty -delete
-[ -d "$BACKUP" ] && echo "Backups: $BACKUP"
+# Drop only directories this script created and left unused; backed-up trees stay exact.
+rmdir "$BACKUP/bin" 2>/dev/null || true
+rmdir "$BACKUP" 2>/dev/null || true
+if [ -d "$BACKUP" ]; then echo "Backups: $BACKUP"; fi
 echo "Done. Restart Claude Code, Codex and OMP sessions so they reload the skill and MCP server."
