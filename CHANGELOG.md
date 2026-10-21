@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed after the 2026-10-22 review (needs sign-off)
+- **Git hooks survive moving or renaming the repository.** `hooks install` records `core.hooksPath` as an absolute path, so after a move Git ran no hooks at all, including the user's own `pre-commit`, and `hooks install`/`uninstall` refused with "invalid owned hook manifest". A manifest whose paths differ from the real location only by the common Git directory prefix is now recognised as moved:
+  - `hooks status` reports `state: "relocated"` with `moved_from` and exits 1, like a conflict.
+  - `hooks install` re-homes it: shims, manifest and `core.hooksPath` are rewritten for the new location (an original hooks directory inside the old Git directory moves with it), so the original hooks run again. The result adds `moved_from`. If anything fails before the new `core.hooksPath` is published, the previous shims and manifest are put back.
+  - `hooks uninstall` restores the saved original `core.hooksPath` (re-homed the same way) and removes the state.
+  - A shim that Git runs against a moved manifest still exits 1 rather than guess, now with a message to run `hooks install`.
+  - Unchanged: every other manifest mismatch is still refused, and nothing changes until the user runs `hooks install` or `hooks uninstall`.
+
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 

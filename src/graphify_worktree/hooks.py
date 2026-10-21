@@ -126,7 +126,31 @@ def _wanted(root, saved):
     return tuple(hook for hook in HOOKS if hook in EVENTS or hook in present)
 
 
+def _moved_from(state, saved):
+    """The common Git directory a manifest was written in, if the repository moved since.
+
+    Only a manifest whose paths differ from this state directory by the common
+    directory prefix alone counts; anything else stays an invalid manifest.
+    """
+    if not isinstance(saved, dict) or not isinstance(saved.get("common_dir"), str):
+        return None
+    previous = Path(saved["common_dir"])
+    if (str(previous) == str(state.parent) or not previous.is_absolute()
+            or saved.get("hooks_path") != str(previous / state.name / "hooks")):
+        return None
+    return previous
+
+
+def _rehome(value, previous, common):
+    """A path recorded under the previous common directory, moved under the current one."""
+    path = Path(value)
+    if path.is_absolute() and path.is_relative_to(previous):
+        return str(common / path.relative_to(previous))
+    return value
+
+
 def _load(state):
+    """The manifest, and the common directory it was written in if the repository moved since."""
     _plain(state, directory=True)
     _plain(state / "manifest.json")
     try:
@@ -134,9 +158,11 @@ def _load(state):
             saved = json.load(stream)
     except ValueError as error:
         raise HookError(f"invalid owned hook manifest: {error}") from error
+    previous = _moved_from(state, saved)
+    written = state if previous is None else previous / state.name
     if (not isinstance(saved, dict) or saved.get("schema") not in (1, SCHEMA)
-            or saved.get("common_dir") != str(state.parent)
-            or saved.get("hooks_path") != str(state / "hooks")
+            or saved.get("common_dir") != str(written.parent)
+            or saved.get("hooks_path") != str(written / "hooks")
             or not isinstance(saved.get("original_local"), list)
             or len(saved["original_local"]) > 1
             or not all(isinstance(value, str) for value in saved["original_local"])
@@ -147,17 +173,19 @@ def _load(state):
                                                or not set(saved["hooks"]) <= set(HOOKS)))):
         raise HookError("invalid owned hook manifest")
     _plain(state / "hooks", directory=True)
-    return saved
+    return saved, previous
 
 
-def _intact(state, saved):
+def _intact(state, saved, previous=None):
+    """The shims are exactly as written, at the state path they were written for."""
+    written = state if previous is None else previous / state.name
     expected = set(_shimmed(saved))
     if set(os.listdir(state)) != {"manifest.json", "hooks"} or set(os.listdir(state / "hooks")) != expected:
         raise HookError("owned hook directory has unexpected or missing files; refusing to modify it")
     for hook in expected:
         path = state / "hooks" / hook
         _plain(path)
-        if not os.access(path, os.X_OK) or path.read_text() != shim_script(state, hook, saved):
+        if not os.access(path, os.X_OK) or path.read_text() != shim_script(written, hook, saved):
             raise HookError(f"owned hook shim was modified: {path}")
 
 
@@ -214,6 +242,41 @@ def _active(root, common, saved):
         raise HookError("core.hooksPath changed outside this integration; refusing to overwrite it")
 
 
+def _check_includes(root, lock, hooks_path):
+    effective = _git(root, "config", "--file", str(lock), "--includes",
+                     "--path", "--null", "--get", "core.hooksPath").stdout.removesuffix("\0")
+    if effective != hooks_path:
+        raise HookError("included configuration overrides local hooksPath; no configuration changed")
+
+
+def _repair(root, state, lock, publish, saved, previous):
+    """Re-home a moved repository: shims, manifest and core.hooksPath for its new location.
+
+    Git found no hooks at the old absolute hooksPath, so until this runs none
+    of the repository's hooks, including the user's own, were running.
+    """
+    common = state.parent
+    moved = {**saved, "common_dir": str(common), "hooks_path": str(state / "hooks"),
+             "original_local": [_rehome(value, previous, common) for value in saved["original_local"]],
+             "original_directory": _rehome(saved["original_directory"], previous, common)}
+    if saved["schema"] == SCHEMA:
+        moved["hooks"] = [hook for hook in HOOKS if hook in set(saved["hooks"]) | set(_wanted(root, moved))]
+    _set_config(root, lock, [moved["hooks_path"]])
+    _check_includes(root, lock, moved["hooks_path"])
+    try:
+        _write_shims(state, moved, _shimmed(moved))
+        _write_manifest(state, moved)
+        publish()
+    except BaseException:
+        # Put back exactly what was there, so the next attempt recognises it again.
+        for hook in set(_shimmed(moved)) - set(_shimmed(saved)):
+            (state / "hooks" / hook).unlink(missing_ok=True)
+        for hook in _shimmed(saved):
+            (state / "hooks" / hook).write_text(shim_script(previous / state.name, hook, saved), encoding="utf-8")
+        _write_manifest(state, saved)
+        raise
+
+
 # Commands ----------------------------------------------------------------------
 
 def install(path):
@@ -224,9 +287,13 @@ def install(path):
     with _config_lock(root, common) as (lock, publish):
         _supported(root)
         if state.exists() or state.is_symlink():
-            saved = _load(state)
+            saved, previous = _load(state)
             _active(root, common, saved)
-            _intact(state, saved)
+            _intact(state, saved, previous)
+            if previous is not None:
+                _repair(root, state, lock, publish, saved, previous)
+                return {"state": "installed", "changed": True, "worktree_root": str(root),
+                        "hooks_path": str(state / "hooks"), "moved_from": str(previous)}
             added = [hook for hook in _wanted(root, saved) if hook not in _shimmed(saved)]
             if added and saved["schema"] == SCHEMA:
                 saved["hooks"] = [hook for hook in HOOKS if hook in set(saved["hooks"]) | set(added)]
@@ -258,10 +325,7 @@ def install(path):
             _write_shims(state, saved, saved["hooks"])
             (state / "manifest.json").write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
             _set_config(root, lock, [saved["hooks_path"]])
-            effective = _git(root, "config", "--file", str(lock), "--includes",
-                             "--path", "--null", "--get", "core.hooksPath").stdout.removesuffix("\0")
-            if effective != saved["hooks_path"]:
-                raise HookError("included configuration overrides local hooksPath; no configuration changed")
+            _check_includes(root, lock, saved["hooks_path"])
             publish()
         except BaseException:
             # Only files created above are removed; unexpected files are retained.
@@ -281,9 +345,14 @@ def status(path):
     result = {"state": "not-installed", "worktree_root": str(root), "hooks_path": _effective(root)}
     if state.exists() or state.is_symlink():
         try:
-            saved = _load(state)
+            saved, previous = _load(state)
             _active(root, common, saved)
-            _intact(state, saved)
+            _intact(state, saved, previous)
+            if previous is not None:
+                result.update(state="relocated", moved_from=str(previous),
+                              reason="the repository moved since hooks install, so Git runs none of its hooks; "
+                                     "run hooks install to repair them or hooks uninstall to remove them")
+                return result
             result.update(state="installed", original_local=saved["original_local"],
                           original_directory=saved["original_directory"],
                           unforwarded=[hook for hook in _wanted(root, saved) if hook not in _shimmed(saved)])
@@ -299,10 +368,13 @@ def uninstall(path):
     with _config_lock(root, common) as (lock, publish):
         if not state.exists() and not state.is_symlink():
             return {"state": "not-installed", "changed": False, "worktree_root": str(root)}
-        saved = _load(state)
+        saved, previous = _load(state)
         _active(root, common, saved)
-        _intact(state, saved)
-        _set_config(root, lock, saved["original_local"])
+        _intact(state, saved, previous)
+        original = saved["original_local"]
+        if previous is not None:
+            original = [_rehome(value, previous, common) for value in original]
+        _set_config(root, lock, original)
         publish()
         for hook in _shimmed(saved):
             (state / "hooks" / hook).unlink()
@@ -382,7 +454,9 @@ def dispatch(state_path, hook, arguments):
     try:
         if not state.is_absolute() or state.parent != state.parent.resolve():
             raise HookError("invalid owned hook state path")
-        saved = _load(state)
+        saved, previous = _load(state)
+        if previous is not None:
+            raise HookError("the repository moved since hooks install; run graphify-worktree hooks install")
         original = Path(saved["original_directory"]) / hook
         if original.resolve().is_relative_to(state):
             raise HookError("refusing recursive original hook")
@@ -423,7 +497,7 @@ def run(arguments):
     try:
         response = {"install": install, "status": status, "uninstall": uninstall}[arguments.hooks_action](arguments.path)
         print(json.dumps(response, indent=2))
-        return 1 if response["state"] == "conflict" else 0
+        return 1 if response["state"] in ("conflict", "relocated") else 0
     except PolicyError as error:
         print(json.dumps({"state": "denied", "reason": str(error)}))
         return errors.exit_code(error)

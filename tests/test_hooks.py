@@ -1,3 +1,4 @@
+import argparse
 import fcntl
 import json
 import os
@@ -126,6 +127,73 @@ def test_legacy_installation_is_still_recognised_and_removable(repo):
     hooks.uninstall(repo)
     assert git(repo, "config", "--get", "core.hooksPath") == ".custom-hooks"
 
+
+
+def blocking_repo(root, custom):
+    """A repository whose own pre-commit hook exits 7, in core.hooksPath or the default directory."""
+    root.mkdir()
+    git(root, "init", "-q", "-b", "main")
+    git(root, "commit", "-q", "--allow-empty", "-m", "base")
+    policy.configure(root, "graph")
+    directory = root / (".hooks" if custom else ".git/hooks")
+    directory.mkdir(exist_ok=True)
+    hook(directory, "pre-commit", 'echo "original pre-commit" >&2; exit 7\n')
+    if custom:
+        git(root, "config", "core.hooksPath", ".hooks")
+    return root.resolve()
+
+
+def commit(root):
+    return subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l",
+                           "commit", "-q", "--allow-empty", "-m", "change"], capture_output=True, text=True)
+
+
+def local_hooks_path(root):
+    result = subprocess.run(["git", "-C", str(root), "config", "--local", "--get", "core.hooksPath"],
+                            capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+@pytest.mark.parametrize("custom", [True, False], ids=["core-hooks-path", "default-hooks-directory"])
+def test_hooks_install_repairs_a_moved_repository(tmp_path, home, monkeypatch, custom):
+    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
+    old = blocking_repo(tmp_path / "repo", custom)
+    hooks.install(old)
+    assert commit(old).returncode == 1
+    (tmp_path / "repo").rename(tmp_path / "moved")
+    moved = (tmp_path / "moved").resolve()
+    status = hooks.status(moved)
+    assert (status["state"], status["moved_from"]) == ("relocated", str(old / ".git"))
+    assert hooks.run(argparse.Namespace(hooks_action="status", path=moved)) == 1
+    result = hooks.install(moved)
+    assert (result["changed"], result["moved_from"]) == (True, str(old / ".git"))
+    blocked = commit(moved)
+    assert blocked.returncode == 1 and "original pre-commit" in blocked.stderr
+    assert local_hooks_path(moved) == str(moved / ".git/graphify-worktree-hooks/hooks")
+    assert hooks.status(moved)["state"] == "installed"
+    assert hooks.install(moved)["changed"] is False
+
+
+@pytest.mark.parametrize("custom", [True, False], ids=["core-hooks-path", "default-hooks-directory"])
+def test_hooks_uninstall_works_on_a_moved_repository(tmp_path, home, monkeypatch, custom):
+    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
+    blocking_repo(tmp_path / "repo", custom)
+    hooks.install(tmp_path / "repo")
+    (tmp_path / "repo").rename(tmp_path / "moved")
+    moved = (tmp_path / "moved").resolve()
+    assert hooks.uninstall(moved)["changed"] is True
+    assert local_hooks_path(moved) == (".hooks" if custom else None)
+    assert not (moved / ".git/graphify-worktree-hooks").exists()
+    assert commit(moved).returncode == 1, "Git runs the original pre-commit again"
+
+
+def test_a_shim_of_a_moved_repository_never_bypasses_the_original_hook(tmp_path, home, monkeypatch):
+    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
+    blocking_repo(tmp_path / "repo", True)
+    hooks.install(tmp_path / "repo")
+    (tmp_path / "repo").rename(tmp_path / "moved")
+    moved = (tmp_path / "moved").resolve()
+    assert hooks.dispatch(str(moved / ".git/graphify-worktree-hooks"), "pre-commit", []) == 1
 
 @pytest.fixture
 def graph_output(repo):
