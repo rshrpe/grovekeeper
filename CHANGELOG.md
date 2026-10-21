@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Added in Phase 3: memory dashboard (needs sign-off)
+- **`graphify-worktree dashboard PATH [--once]`** writes `Projects/<repository>/Memory.base` in the authored memory vault, beside that repository's `Memory/` folder. Bases only query notes in their own vault.
+  - It is scoped with `file.inFolder("Projects/<repository>/Memory")` and has five table views: Current (grouped by status), By kind, Proposals by branch, Needs review (a `review` formula over `verify_by`/`stale_after`), and History (superseded).
+  - It needs Obsidian consent; `--once` works and session off wins.
+  - It never creates the Memory folder or any note, and writes symlink-safely through directory descriptors.
+  - A re-run reports `unchanged`. A copy that differs (for example after editing views in Obsidian) is never overwritten: the command exits 1 and keeps it. Delete the file to get the current template.
+- CLI only and explicit. It isn't an MCP tool, so the MCP tool surface is unchanged.
+- The generated YAML was validated with PyYAML, outside the project's dependencies: four top-level keys, every referenced formula defined. It was not opened in the Obsidian app.
+
 ### Changed in Phase 3: near-duplicate check on memory save (needs sign-off)
 - **`memory_save` refuses a near-duplicate title** unless the request has `duplicate_ok: true` (new optional boolean, default false). The check runs under the save's exclusive memory lock, against every readable, non-superseded note of the repository, including proposals on other branches.
   - **Titles are compared word by word,** with the search scorer's tokenization. They match when the words are identical, or when at least two words are shared, the shared words are at least half of all words and at least three quarters of the shorter title. So "Retry ceiling is three" matches "Retry ceiling is 3", but "Use three retries" doesn't match "Use three workers", and "Retry policy" doesn't match "Retry policy for webhooks differs".

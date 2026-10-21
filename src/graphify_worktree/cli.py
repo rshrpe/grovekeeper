@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from graphify_worktree import artifacts, errors, upstream
+from graphify_worktree import artifacts, dashboard, errors, upstream
 from graphify_worktree import hooks, learning, nudge, recall
 from graphify_worktree.errors import PolicyError
 from graphify_worktree.freshness import inspect
@@ -48,6 +48,9 @@ def parser():
     for command_parser in (refresh_parser, status_parser, ensure_parser, export_parser):
         command_parser.add_argument("--once", action="store_true", help="permit only this operation without changing repository preference; session off still wins")
     memory_schema.add_parser(commands)
+    dashboard_parser = commands.add_parser("dashboard", help="obsidian mode: write the Obsidian Bases dashboard of this repository's memory notes; never overwrites a changed copy")
+    dashboard_parser.add_argument("path", nargs="?", default=".")
+    dashboard_parser.add_argument("--once", action="store_true", help="permit only this operation; session off still wins")
     learning.add_parser(commands)
     hooks.add_parser(commands)
     recall_parser = commands.add_parser("recall", help="session-start hook: print accepted memory titles in obsidian mode; otherwise silent; always exits 0")
@@ -84,6 +87,9 @@ def main(argv=None):
         result = handle_memory(arguments.memory_action, arguments.path,
                                memory_schema.payload_from_cli(arguments), once=arguments.once)
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    if arguments.command == "dashboard":
+        emit(dashboard.write(arguments.path, once=arguments.once))
         return 0
     if arguments.command == "learning":
         emit(learning.run(arguments, sys.stdin))

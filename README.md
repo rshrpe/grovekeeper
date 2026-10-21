@@ -80,6 +80,7 @@ graphify-worktree status .                 # 0 fresh, 3 stale, 4 missing, 5 deni
 graphify-worktree export . --open          # obsidian mode: generated vault
 graphify-worktree memory search . --query "retry policy"
 graphify-worktree recall .                 # what the optional session-start hook injects (obsidian mode only)
+graphify-worktree dashboard .              # obsidian mode: Obsidian Bases view of this repository's memory notes
 graphify-worktree learning save-result . --input-file result.json   # upstream work memory, needs approval
 graphify-worktree --help
 ```
@@ -117,6 +118,7 @@ src/graphify_worktree/
   guard.py            guarded_graph/ensure: fresh graph in, result withheld if anything moved
   obsidian_export.py  generated vault export and `export --open`
   recall.py           session-start hook: accepted memory titles, silent unless obsidian mode
+  dashboard.py        generated Obsidian Bases view (Memory.base) of one repository's memory
   nudge.py            pre-tool hook: capped, advisory graph suggestion, silent unless graph consent
   learning.py         upstream save-result/reflect work memory behind the graph gates
   memory/schema.py    the memory action registry (validation, CLI, MCP schemas)
