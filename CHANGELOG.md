@@ -5,7 +5,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 
 ### Added
-- Python package `worktree-knowledge` (`src/graphify_worktree`) with console scripts `graphify-worktree` and `graphify-worktree-mcp`. It requires Python ≥ 3.11 and pins `graphifyy[mcp,sql]==0.9.93` and `mcp==2.3.0` exactly.
+- Project and package name **grovekeeper** (uv tool `grovekeeper`, backups under `~/.local/share/grovekeeper/`). The skill (`worktree-knowledge`), the commands (`graphify-worktree`, `graphify-worktree-mcp`), the MCP server id (`graphify`), the environment variables (`WORKTREE_KNOWLEDGE_*`) and the rules markers are unchanged. `install.sh` removes a uv tool installed under the earlier name `worktree-knowledge` before installing. Git hooks installed while the tool had that name fall back to running only the original hook until `hooks install` is re-run.
+- GitHub Actions CI: unit and integration tests on Ubuntu and macOS with Python 3.11 and 3.12.
+- Python package (`src/graphify_worktree`) (`src/graphify_worktree`) with console scripts `graphify-worktree` and `graphify-worktree-mcp`. It requires Python ≥ 3.11 and pins `graphifyy[mcp,sql]==0.9.93` and `mcp==2.3.0` exactly.
 - `upstream.py` is the only module that imports Graphify or the MCP SDK. Both entry points check the pinned versions at startup.
 - `settings.py`: vault roots, the Obsidian CLI path and the skill directory can be overridden through `WORKTREE_KNOWLEDGE_*` environment variables, with defaults unchanged.
 - `install.sh` / `uninstall.sh` and `python -m graphify_worktree.harness`: uv tool install from the lock file, skill links, MCP registration for Claude Code, Codex and OMP, global rules rendered from one template, and the global `graphify-out/` ignore line. All are idempotent and back up anything they replace.

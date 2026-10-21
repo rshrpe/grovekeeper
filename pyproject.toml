@@ -1,5 +1,5 @@
 [project]
-name = "worktree-knowledge"
+name = "grovekeeper"
 version = "0.1.0"
 description = "Consent-gated, per-worktree Graphify graphs and shared Obsidian project memory for coding agents (Claude Code, Codex, OMP)."
 readme = "README.md"

@@ -303,7 +303,7 @@ def install(repo, bin_dir, backup_dir, *, report=print):
     template = (repo / "harness/worktree-knowledge.md").read_text(encoding="utf-8")
     source = repo / "skills/worktree-knowledge"
     if not (source / "SKILL.md").is_file():
-        raise ValueError(f"not a worktree-knowledge checkout: {repo}")
+        raise ValueError(f"not a grovekeeper checkout: {repo}")
     command = str(bin_dir / SERVER_COMMAND)
     if not Path(command).exists():
         report(f"warning: {command} does not exist yet; MCP registrations point at it")
@@ -370,7 +370,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="python -m graphify_worktree.harness")
     actions = parser.add_subparsers(dest="action", required=True)
     install_parser = actions.add_parser("install")
-    install_parser.add_argument("--repo", required=True, help="worktree-knowledge checkout providing the skill and rules")
+    install_parser.add_argument("--repo", required=True, help="grovekeeper checkout providing the skill and rules")
     install_parser.add_argument("--bin-dir", required=True, help="directory holding graphify-worktree-mcp")
     install_parser.add_argument("--backup-dir", required=True)
     uninstall_parser = actions.add_parser("uninstall")
@@ -384,7 +384,7 @@ def main(argv=None):
         else:
             uninstall(arguments.repo, arguments.bin_dir, arguments.backup_dir)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
-        sys.exit(f"worktree-knowledge harness: {error}")
+        sys.exit(f"grovekeeper harness: {error}")
 
 
 if __name__ == "__main__":

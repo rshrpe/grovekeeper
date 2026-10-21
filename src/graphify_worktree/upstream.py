@@ -29,7 +29,7 @@ def assert_versions():
         if found != expected:
             raise UpstreamVersionError(
                 f"{package}=={expected} is required (found {found}); private upstream APIs "
-                "are only verified against the pinned versions. Reinstall worktree-knowledge."
+                "are only verified against the pinned versions. Reinstall grovekeeper."
             )
 
 

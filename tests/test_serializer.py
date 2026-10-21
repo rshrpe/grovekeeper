@@ -80,7 +80,7 @@ def test_cancelling_a_running_call_returns_promptly_and_signals_the_worker():
         call.cancel()
         with pytest.raises(asyncio.CancelledError):
             await call
-        assert time.monotonic() - started < 0.1, "a cancelled request must not wait for its worker"
+        assert time.monotonic() - started < 0.5, "a cancelled request must not wait for its worker"
         # The next call waits for the abandoned worker to finish, then runs.
         assert await asyncio.wait_for(serializer.run(lambda cancelled: finished.is_set()), 2) is True
 

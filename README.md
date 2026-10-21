@@ -1,6 +1,8 @@
-# worktree-knowledge
+# grovekeeper
 
 Consent-gated, per-worktree [Graphify](https://pypi.org/project/graphifyy/) code graphs and shared Obsidian project memory for coding agents. One managed CLI (`graphify-worktree`) and MCP server (`graphify-worktree-mcp`) are shared by Claude Code, Codex and OMP (oh-my-pi), together with a skill (`skills/worktree-knowledge/SKILL.md`) that tells each agent when it may use them.
+
+grovekeeper is the project and package name. The interfaces your agents use keep their descriptive names: the `worktree-knowledge` skill, the `graphify-worktree` commands, the `graphify` MCP server and the `WORKTREE_KNOWLEDGE_*` variables.
 
 It wraps upstream Graphify rather than replacing it. What it adds:
 
@@ -21,8 +23,8 @@ It wraps upstream Graphify rather than replacing it. What it adds:
 ## Install
 
 ```sh
-git clone <this repository> ~/src/worktree-knowledge
-cd ~/src/worktree-knowledge
+git clone <this repository> ~/src/grovekeeper
+cd ~/src/grovekeeper
 ./install.sh
 ```
 
@@ -82,7 +84,7 @@ graphify-worktree --help
 uv sync                             # .venv with the pinned dependencies and pytest
 uv run pytest -m "not integration"  # unit tests, ~10 s
 uv run pytest                       # plus smokes and CLI tests under a disposable HOME, ~1 min
-PY="$(uv tool dir)/worktree-knowledge/bin/python"
+PY="$(uv tool dir)/grovekeeper/bin/python"
 "$PY" tests/smoke/smoke.py            # graph/policy integration smoke
 "$PY" tests/smoke/memory_smoke.py     # memory integration smoke
 "$PY" tests/smoke/lifecycle_smoke.py  # MCP lifecycle and Git hooks smoke

@@ -1,4 +1,4 @@
-# Installing worktree-knowledge
+# Installing grovekeeper
 
 ## 1. Prerequisites
 
@@ -23,13 +23,13 @@ From the checkout (keep it in place afterwards; the skill is linked from it):
 Options, all through the environment:
 
 - `WORKTREE_KNOWLEDGE_PYTHON` sets the Python for the tool environment (default `3.12`; any version ≥ 3.11).
-- `WORKTREE_KNOWLEDGE_BACKUP_DIR` sets where to keep copies of replaced files (default `~/.local/share/worktree-knowledge/backups/<UTC timestamp>`).
+- `WORKTREE_KNOWLEDGE_BACKUP_DIR` sets where to keep copies of replaced files (default `~/.local/share/grovekeeper/backups/<UTC timestamp>`).
 - `WORKTREE_KNOWLEDGE_SKILL_DIR` sets where to link the skill (default `~/.agents/skills/worktree-knowledge`).
 - `UV_TOOL_DIR` / `UV_TOOL_BIN_DIR` are uv's own locations for tool environments and executables.
 
 ## 3. What the installer changes
 
-1. **Executables.** `uv tool install --force` installs the `worktree-knowledge` tool with the exact dependency versions in `uv.lock`, so `graphify-worktree` and `graphify-worktree-mcp` appear in `uv tool dir --bin` (normally `~/.local/bin`). If executables with those names already exist and are not this tool's entry points, they are copied to the backup directory first.
+1. **Executables.** `uv tool install --force` installs the `grovekeeper` tool with the exact dependency versions in `uv.lock`, so `graphify-worktree` and `graphify-worktree-mcp` appear in `uv tool dir --bin` (normally `~/.local/bin`). If executables with those names already exist and are not this tool's entry points, they are copied to the backup directory first.
 2. **Skill links.** `~/.agents/skills/worktree-knowledge` links to `skills/worktree-knowledge` in the checkout. If `~/.claude` exists, `~/.claude/skills/worktree-knowledge` links to it too. Anything already at those paths is moved into the backup directory. Codex discovers `~/.agents/skills` natively. OMP needs that directory in `skills.customDirectories` of `~/.omp/agent/config.yml`; the installer prints a reminder if it is missing.
 3. **MCP registrations.** Each points at the absolute path of `graphify-worktree-mcp`. Harnesses whose configuration directory does not exist are skipped.
    - Claude Code: `claude mcp add-json --scope user graphify '{"type":"stdio","command":…,"args":[],"env":{}}'`. Claude's own CLI writes `~/.claude.json`. Without the CLI, the installer prints the command to run.
@@ -46,7 +46,7 @@ Restart running Claude Code, Codex and OMP sessions afterwards so they start the
 
 ```sh
 graphify-worktree policy .            # prints JSON; exit 0
-PY="$(uv tool dir)/worktree-knowledge/bin/python"
+PY="$(uv tool dir)/grovekeeper/bin/python"
 "$PY" tests/smoke/smoke.py
 "$PY" tests/smoke/memory_smoke.py
 "$PY" tests/smoke/lifecycle_smoke.py

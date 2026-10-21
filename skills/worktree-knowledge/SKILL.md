@@ -144,9 +144,9 @@ Obsidian must be open for native CLI operations. Graph queries/ensure do not cre
 
 ## Installation constraints
 
-Install from a worktree-knowledge checkout with `./install.sh` (details in the repository's `INSTALL.md`). Prerequisites: macOS or Linux, Python 3.11 or newer (uv provides 3.12 by default), Git 2.31 or newer, uv, and Obsidian with its native CLI enabled for Obsidian features. The installer:
+Install from a grovekeeper checkout (the repository that ships this skill) with `./install.sh` (details in the repository's `INSTALL.md`). Prerequisites: macOS or Linux, Python 3.11 or newer (uv provides 3.12 by default), Git 2.31 or newer, uv, and Obsidian with its native CLI enabled for Obsidian features. The installer:
 
-- installs the `worktree-knowledge` uv tool with the locked dependency set (`graphifyy[mcp,sql]==0.9.93`, `mcp==2.3.0`), providing `graphify-worktree` and `graphify-worktree-mcp` in uv's tool bin directory (normally `~/.local/bin`);
+- installs the `grovekeeper` uv tool with the locked dependency set (`graphifyy[mcp,sql]==0.9.93`, `mcp==2.3.0`), providing `graphify-worktree` and `graphify-worktree-mcp` in uv's tool bin directory (normally `~/.local/bin`);
 - links this skill into `~/.agents/skills/worktree-knowledge` and `~/.claude/skills/worktree-knowledge`. OMP discovers it through `skills.customDirectories`; Codex discovers `~/.agents/skills` natively. Do not duplicate the skill into `~/.codex/skills`. Codex uses `$worktree-knowledge` and `$graphify` for explicit invocation;
 - registers the managed `graphify-worktree-mcp` server as `graphify` at user scope in Claude Code (through `claude mcp add-json`), Codex (`[mcp_servers.graphify]` in `~/.codex/config.toml`, shared by its CLI and desktop) and OMP (`~/.omp/agent/mcp.json`), using the absolute command path. All three harnesses must use that managed entrypoint, never the upstream `graphify-mcp`;
 - renders the participation-first global rules from one template into `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` and `~/.omp/agent/RULES.md`, between `worktree-knowledge` marker comments;
@@ -162,14 +162,14 @@ OMP's Graphify request timeout is 600,000 ms and Codex's `tool_timeout_sec` is 6
 
 The package pins `graphifyy[mcp,sql]==0.9.93` with `mcp==2.3.0` and refuses to start (exit 1) when other versions are installed, because it relies on private upstream APIs. Upgrade by changing the pins, re-locking, running the smokes and reinstalling. Graphify supports MCP 2; the old `mcp<2` workaround is obsolete. SQL support is installed for database/migration relationships.
 
-Refresh the canonical upstream skill after upgrading with `"$(uv tool dir)/worktree-knowledge/bin/graphify" install --platform agents` (skill-only). Do not run per-platform installers or install upstream rebuild hooks over this wrapper-managed setup: they can introduce competing routing and refresh instructions. Run the integration smokes after dependency changes. Old graphs become stale when the Graphify version changes; refresh the selected worktree before querying it and re-export its generated vault afterward. Never rebuild an unrelated or actively changing checkout merely to validate an installation.
+Refresh the canonical upstream skill after upgrading with `"$(uv tool dir)/grovekeeper/bin/graphify" install --platform agents` (skill-only). Do not run per-platform installers or install upstream rebuild hooks over this wrapper-managed setup: they can introduce competing routing and refresh instructions. Run the integration smokes after dependency changes. Old graphs become stale when the Graphify version changes; refresh the selected worktree before querying it and re-export its generated vault afterward. Never rebuild an unrelated or actively changing checkout merely to validate an installation.
 
 ## Verification and local state
 
-From a worktree-knowledge checkout, `uv run pytest` runs the unit tests and, under a disposable HOME, the integration smokes against the development environment (`-m "not integration"` skips the slower ones). To verify an installed copy, run the smokes with the installed tool's Python, which also selects that installation's executables:
+From a grovekeeper checkout, `uv run pytest` runs the unit tests and, under a disposable HOME, the integration smokes against the development environment (`-m "not integration"` skips the slower ones). To verify an installed copy, run the smokes with the installed tool's Python, which also selects that installation's executables:
 
 ```sh
-PY="$(uv tool dir)/worktree-knowledge/bin/python"
+PY="$(uv tool dir)/grovekeeper/bin/python"
 "$PY" tests/smoke/smoke.py
 "$PY" tests/smoke/memory_smoke.py
 "$PY" tests/smoke/lifecycle_smoke.py
