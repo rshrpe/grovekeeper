@@ -77,6 +77,7 @@ graphify-worktree policy .                 # read-only consent check
 graphify-worktree configure graph .        # save a mode for the repository
 graphify-worktree ensure .                 # build or reuse a fresh graph
 graphify-worktree status .                 # 0 fresh, 3 stale, 4 missing, 5 denied
+graphify-worktree diff ../main .           # structural differences between two worktrees' graphs
 graphify-worktree export . --open          # obsidian mode: generated vault
 graphify-worktree export . --wiki          # ... plus upstream's wiki articles in _graphify-worktree/wiki/
 graphify-worktree memory search . --query "retry policy"
@@ -117,6 +118,7 @@ src/graphify_worktree/
   publish.py          refresh: verify and publish a new generation
   incremental.py      opt-in incremental rebuilds: seed, plan, full on any doubt
   guard.py            guarded_graph/ensure: fresh graph in, result withheld if anything moved
+  diff.py             compare two worktrees' fresh graphs by node id
   obsidian_export.py  generated vault export and `export --open`
   recall.py           session-start hook: accepted memory titles, silent unless obsidian mode
   dashboard.py        generated Obsidian Bases view (Memory.base) of one repository's memory

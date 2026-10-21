@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Added in Phase 3: worktree graph diff (needs sign-off)
+- **`graphify-worktree diff A B [--limit N] [--once]`** compares two worktrees' graphs of the same repository.
+  - **Freshness:** each side is made fresh and read under its own `guarded_graph`, one after the other: consent, worktree lock, rebuild if needed, result withheld if that side changes during its read.
+  - **Matching:** nodes by id (checkout-independent), edges by (source, target, relation).
+  - **Reports:** counts of added, removed, moved (source file or location changed) and unchanged nodes, and of added and removed edges. Each category gets up to N examples (default 20; `truncated` says when more exist), plus both sides' worktree, branch, HEAD, generation and scope.
+  - **Warnings:** it warns when the two scopes differ.
+- **Refusals:** the same worktree twice and two different repositories exit 1. A negative `--limit` is a usage error (exit 2). Without graph consent it exits 5, before any graph is built.
+- It is read-only apart from the rebuilds any graph query may do. CLI only, so the MCP tool surface is unchanged.
+
 ### Added in Phase 3: `export --wiki` (needs sign-off)
 - **`graphify-worktree export PATH --wiki`** also writes upstream Graphify's wiki (`graphify.wiki.to_wiki`, through `upstream.py`) to `_graphify-worktree/wiki/` in the worktree's generated vault.
   - It produces `index.md` plus one article per community and per hub (god) node, with relative Markdown links that resolve inside that folder.

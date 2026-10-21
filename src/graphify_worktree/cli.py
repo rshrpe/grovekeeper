@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from graphify_worktree import artifacts, dashboard, errors, upstream
+from graphify_worktree import artifacts, dashboard, diff, errors, upstream
 from graphify_worktree import hooks, learning, nudge, recall
 from graphify_worktree.errors import PolicyError
 from graphify_worktree.freshness import inspect
@@ -21,6 +21,13 @@ STATE_EXIT = {"fresh": 0, "stale": 3, "missing": 4}
 
 def emit(payload):
     print(json.dumps(payload, indent=2))
+
+
+def non_negative(value):
+    number = int(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("must not be negative")
+    return number
 
 
 def parser():
@@ -48,6 +55,11 @@ def parser():
     export_parser.add_argument("--wiki", action="store_true", help="also write upstream wiki articles to _graphify-worktree/wiki/ in the generated vault")
     for command_parser in (refresh_parser, status_parser, ensure_parser, export_parser):
         command_parser.add_argument("--once", action="store_true", help="permit only this operation without changing repository preference; session off still wins")
+    diff_parser = commands.add_parser("diff", help="compare two worktrees' fresh graphs of one repository (nodes by id, edges by endpoints)")
+    diff_parser.add_argument("a", help="first worktree")
+    diff_parser.add_argument("b", help="second worktree")
+    diff_parser.add_argument("--limit", type=non_negative, default=20, help="examples listed per category (default 20)")
+    diff_parser.add_argument("--once", action="store_true", help="permit only this comparison; session off still wins")
     memory_schema.add_parser(commands)
     dashboard_parser = commands.add_parser("dashboard", help="obsidian mode: write the Obsidian Bases dashboard of this repository's memory notes; never overwrites a changed copy")
     dashboard_parser.add_argument("path", nargs="?", default=".")
@@ -88,6 +100,9 @@ def main(argv=None):
         result = handle_memory(arguments.memory_action, arguments.path,
                                memory_schema.payload_from_cli(arguments), once=arguments.once)
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    if arguments.command == "diff":
+        emit(diff.compare(arguments.a, arguments.b, once=arguments.once, limit=arguments.limit))
         return 0
     if arguments.command == "dashboard":
         emit(dashboard.write(arguments.path, once=arguments.once))
