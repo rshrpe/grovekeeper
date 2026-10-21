@@ -47,7 +47,7 @@ The skill is an operational guard on the managed tools, not a filesystem sandbox
 ## Things to know before sharing a vault
 
 - **Memory identity is per clone and per machine.** A repository's memory namespace is derived from the absolute path of its common Git directory. Worktrees of one clone share notes. A second clone, or the same repository at a different path or on another machine, gets a separate namespace. If two engineers sync one Engineering vault, each sees the other's notes rejected as "belongs to another repository".
-- **Git hooks depend on the installed environment.** `graphify-worktree hooks install` (explicit, per repository) writes shims under `.git/graphify-worktree-hooks` that call this tool's Python and its `hooks.py` by absolute path. If the uv tool environment moves, or its Python minor version changes, those shims fail, and a failing `pre-commit` shim blocks commits. Run `graphify-worktree hooks uninstall PATH` before uninstalling or switching Python, and reinstall the hooks afterwards.
+- **Git hooks reference the installed environment.** `graphify-worktree hooks install` (explicit, per repository) writes shims under `.git/graphify-worktree-hooks` for the four event hooks and for the hooks your original hooks directory already has. They call this tool's Python and its `hooks.py` by absolute path. If the uv tool environment disappears or moves, or its Python minor version changes, the shims fall back to running only your original hook: Git keeps working, but graph invalidation hints stop until you run `hooks install` again. Hooks added to your original directory after installation are not forwarded until you re-run `hooks install`; `hooks status` lists them as `unforwarded`. Installs made by earlier versions shim every hook and have no fallback, so reinstall them with `hooks uninstall` then `hooks install`.
 - Upstream versions are pinned exactly (`graphifyy[mcp,sql]==0.9.93`, `mcp==2.3.0`). Some upstream APIs this package uses are private, so it refuses to start on any other version.
 
 ## Configuration
@@ -79,8 +79,9 @@ graphify-worktree --help
 ## Development
 
 ```sh
-uv sync                    # .venv with the pinned dependencies and pytest
-uv run pytest              # unit tests (isolated HOME, no real vaults)
+uv sync                             # .venv with the pinned dependencies and pytest
+uv run pytest -m "not integration"  # unit tests, ~10 s
+uv run pytest                       # plus smokes and CLI tests under a disposable HOME, ~1 min
 PY="$(uv tool dir)/worktree-knowledge/bin/python"
 "$PY" tests/smoke/smoke.py            # graph/policy integration smoke
 "$PY" tests/smoke/memory_smoke.py     # memory integration smoke
@@ -93,17 +94,27 @@ Layout:
 
 ```
 src/graphify_worktree/
-  cli.py          graphify-worktree entry point: refresh/status/ensure/export
-  mcp_server.py   graphify-worktree-mcp: consent-gated proxy of upstream tools + memory
-  policy.py       harness.knowledgeMode, session opt-out, one-off permission
-  memory.py       Markdown memory store; memory_cli.py: its CLI and MCP schemas
-  hooks.py        opt-in Git hook chaining and generation invalidation
-  settings.py     environment-overridable locations
-  upstream.py     the only module importing graphify/mcp; version pins
-  harness.py      installer logic for Claude Code, Codex and OMP
+  cli.py              graphify-worktree entry point and the one error/exit-code emitter
+  mcp_server.py       graphify-worktree-mcp: consent-gated proxy of upstream tools + memory
+  policy.py           harness.knowledgeMode, session opt-out, one-off permission
+  errors.py           KnowledgeError hierarchy and exit-code table
+  gitutil.py          the only Git runner; RepoIdentity shared by vaults and memory
+  settings.py         environment-overridable locations
+  upstream.py         the only module importing graphify/mcp; version pins
+  artifacts.py        owned files under graphify-out/, lock, provenance, vault path
+  freshness.py        Generation, content snapshot, classify(), inspect()
+  extract.py          Graphify structural extraction and report into scratch
+  publish.py          refresh: verify and publish a new generation
+  guard.py            guarded_graph/ensure: fresh graph in, result withheld if anything moved
+  obsidian_export.py  generated vault export and `export --open`
+  memory/schema.py    the memory action registry (validation, CLI, MCP schemas)
+  memory/store.py     note format and safe file I/O
+  memory/service.py   search/get/save/accept/supersede
+  hooks.py            opt-in Git hook chaining and generation invalidation
+  harness.py          installer logic for Claude Code, Codex and OMP
 harness/worktree-knowledge.md   single source for the three harness rule snippets
 skills/worktree-knowledge/      the agent skill
-tests/                          pytest unit tests; tests/smoke: integration smokes
+tests/                          pytest unit and integration tests; tests/smoke: integration smokes
 ```
 
 ## License
