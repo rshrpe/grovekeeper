@@ -33,3 +33,5 @@ module-name = "graphify_worktree"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+pythonpath = ["tests", "tests/smoke"]
+markers = ["integration: runs real git, Graphify and MCP subprocesses (about a minute)"]

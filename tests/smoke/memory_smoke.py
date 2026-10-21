@@ -1,39 +1,27 @@
 """Exercise shared memory through real CLI/MCP using disposable repositories."""
-import asyncio
 import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
-import subprocess
-import sys
-import tempfile
-from datetime import datetime, timezone
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import get_default_environment, stdio_client
+from mcp import ClientSession
+from mcp.client.stdio import stdio_client
 
 from graphify_worktree.memory import handle
 from graphify_worktree.policy import PolicyError
+from support import WRAPPER, Smoke, command, git as run_git, server
 
-BIN = Path(os.environ.get('GRAPHIFY_WORKTREE_BIN') or Path(sys.executable).parent)
-WRAPPER = BIN / 'graphify-worktree'
-MCP = BIN / 'graphify-worktree-mcp'
-VAULT = None  # set by isolate_vaults()
-RESULT = Path(__file__).with_name('memory-smoke-result.json')
+SMOKE = Smoke('memory-smoke')
+passed = SMOKE.passed
 CREATED = set()
-CHECKS = []
 
 
-def command(*args, payload=None, expected=0, env=None):
-    result = subprocess.run([str(a) for a in args], input=json.dumps(payload) if payload is not None else None,
-                            capture_output=True, text=True, timeout=120, env=env)
-    assert result.returncode == expected, (args, result.returncode, result.stdout, result.stderr)
-    return result.stdout
+def vault():
+    return Path(os.environ['WORKTREE_KNOWLEDGE_MEMORY_VAULT'])
 
 
 def git(root, *args):
-    return command('git', '-C', root, *args).strip()
+    return run_git(root, *args).stdout.strip()
 
 
 def memory(action, root, payload=None, expected=0, env=None, **options):
@@ -44,26 +32,9 @@ def memory(action, root, payload=None, expected=0, env=None, **options):
         args.append('--' + name.replace('_', '-'))
         if not isinstance(value, bool):
             args.append(str(value))
-    output = command(*args, payload=payload, expected=expected, env=env)
+    output = command(*args, input=json.dumps(payload) if payload is not None else None,
+                     expected=expected, env=env).stdout
     return json.loads(output) if expected == 0 else output
-
-
-def passed(message):
-    CHECKS.append(message)
-    print('PASS:', message, flush=True)
-
-
-def isolate_vaults(folder):
-    """Point both vault roots into the disposable folder; never the user's vaults."""
-    os.environ['WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT'] = str(folder / 'vaults/Graphify')
-    global VAULT
-    os.environ['WORKTREE_KNOWLEDGE_MEMORY_VAULT'] = str(folder / 'vaults/Engineering')
-    VAULT = folder / 'vaults/Engineering'
-
-
-def server(command):
-    vaults = {key: os.environ[key] for key in ('WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT', 'WORKTREE_KNOWLEDGE_MEMORY_VAULT')}
-    return StdioServerParameters(command=str(command), env={**get_default_environment(), **vaults})
 
 
 def write_payload(kind, title, content, status='proposed'):
@@ -80,7 +51,7 @@ def transition(note_id, **extra):
 def saved(root, payload):
     note = memory('save', root, payload)['note']
     path = Path(note['path'])
-    assert path.is_relative_to(VAULT / 'Projects') and path.parent.name == 'Memory'
+    assert path.is_relative_to(vault() / 'Projects') and path.parent.name == 'Memory'
     CREATED.add(path.parent.parent)
     return note
 
@@ -191,7 +162,7 @@ async def exercise(base):
     assert hashes == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in notes_dir.glob('*.md')}
     passed('Graph-only and session-off deny memory without changing notes')
 
-    async with stdio_client(server(MCP)) as streams:
+    async with stdio_client(server()) as streams:
         async with ClientSession(*streams) as session:
             await session.initialize()
             args = {'project_path': str(root), 'query': 'payment retry'}
@@ -216,27 +187,5 @@ async def exercise(base):
     passed('Managed MCP recalls without a graph and enforces session and payload controls')
 
 
-def main():
-    report = {'started_at': datetime.now(timezone.utc).isoformat(), 'checks': CHECKS}
-    try:
-        with tempfile.TemporaryDirectory(prefix='project-memory-smoke-') as folder, \
-                tempfile.TemporaryDirectory(prefix='worktree-knowledge-vaults-') as vaults:
-            # Outside every disposable repository so vault files never enter a scan.
-            isolate_vaults(Path(vaults).resolve())
-            asyncio.run(exercise(Path(folder).resolve()))
-        report['passed'] = True
-    except BaseException as error:
-        report.update(passed=False, error=repr(error))
-        raise
-    finally:
-        for directory in CREATED:
-            assert directory.is_relative_to(VAULT / 'Projects')
-            if directory.exists():
-                shutil.rmtree(directory)
-        report['finished_at'] = datetime.now(timezone.utc).isoformat()
-        RESULT.write_text(json.dumps(report, indent=2) + '\n')
-        print('Artifact:', RESULT)
-
-
 if __name__ == '__main__':
-    main()
+    SMOKE.run(exercise, 'project-memory-smoke-')

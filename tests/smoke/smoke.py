@@ -4,44 +4,28 @@ Failure cases: wrong-worktree routing, stale dirty/deleted code, stale branch HE
 failed extraction replacing a good graph, MCP caching old data, colliding exports,
 and re-export deleting an authored note. Run after installing graphify-worktree.
 """
-import asyncio
 import hashlib
 import json
 import os
-import shutil
 import subprocess
-import sys
-import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import get_default_environment, stdio_client
+from mcp import ClientSession
+from mcp.client.stdio import stdio_client
 
-BIN = Path(os.environ.get('GRAPHIFY_WORKTREE_BIN') or Path(sys.executable).parent)
-WRAPPER = BIN / 'graphify-worktree'
-MCP = BIN / 'graphify-worktree-mcp'
-RESULT = Path(__file__).with_name('smoke-result.json')
-CHECKS = []
+from support import WRAPPER, Smoke, command, git, init_repo, server, wrapper_json
+
+SMOKE = Smoke('smoke')
+passed = SMOKE.passed
 VAULTS = []
 
 
-def command(*args, cwd=None, expected=0, env=None):
-    result = subprocess.run([str(a) for a in args], cwd=cwd, env=env, text=True, capture_output=True, timeout=180)
-    assert result.returncode == expected, (args, result.returncode, result.stdout, result.stderr)
-    return result.stdout
-
-
-def git(root, *args):
-    return command('git', '-C', root, *args)
-
-
 def status(root, expected=0):
-    return json.loads(command(WRAPPER, 'status', root, expected=expected))
+    return wrapper_json('status', root, expected=expected)
 
 
 def policy(root, **kwargs):
-    return json.loads(command(WRAPPER, 'policy', root, **kwargs))
+    return wrapper_json('policy', root, **kwargs)
 
 
 def graph_path(root):
@@ -56,26 +40,8 @@ def labels(root):
     return {n.get('label', '').removesuffix('()') for n in json.loads(graph_path(root).read_text())['nodes']}
 
 
-def passed(name):
-    CHECKS.append(name)
-    print('PASS:', name, flush=True)
-
-
-def isolate_vaults(folder):
-    """Point both vault roots into the disposable folder; never the user's vaults."""
-    os.environ['WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT'] = str(folder / 'vaults/Graphify')
-    os.environ['WORKTREE_KNOWLEDGE_MEMORY_VAULT'] = str(folder / 'vaults/Engineering')
-
-
-def server(command):
-    vaults = {key: os.environ[key] for key in ('WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT', 'WORKTREE_KNOWLEDGE_MEMORY_VAULT')}
-    return StdioServerParameters(command=str(command), env={**get_default_environment(), **vaults})
-
-
 async def exercise(root):
-    git(root, 'init', '-b', 'main')
-    git(root, 'config', 'user.email', 'graphify-smoke@localhost')
-    git(root, 'config', 'user.name', 'Graphify integration smoke')
+    init_repo(root, 'graphify-smoke')
     source = root / 'quote.py'
     source.write_text('def primary_quote():\n    return 100\n\ndef run_quote():\n    return primary_quote()\n')
     git(root, 'add', 'quote.py')
@@ -123,7 +89,7 @@ async def exercise(root):
     passed('Separate graphs; nested worktree excluded from parent scan')
     other_hash = digest(graph_path(other))
 
-    async with stdio_client(server(MCP)) as streams:
+    async with stdio_client(server()) as streams:
         async with ClientSession(*streams) as session:
             await session.initialize()
 
@@ -230,28 +196,5 @@ async def exercise(root):
     passed('Large Canvas is paged; every community and the full graph remain available')
 
 
-def main():
-    report = {'started_at': datetime.now(timezone.utc).isoformat(), 'checks': CHECKS}
-    try:
-        with tempfile.TemporaryDirectory(prefix='graphify-worktree-smoke-') as folder, \
-                tempfile.TemporaryDirectory(prefix='worktree-knowledge-vaults-') as vaults:
-            # Outside every disposable repository so vault files never enter a scan.
-            isolate_vaults(Path(vaults).resolve())
-            asyncio.run(exercise(Path(folder).resolve()))
-        report['passed'] = True
-    except BaseException as error:
-        report.update(passed=False, error=repr(error))
-        raise
-    finally:
-        for vault in VAULTS:
-            if vault.exists():
-                shutil.rmtree(vault)
-            if vault.parent.exists() and not any(vault.parent.iterdir()):
-                vault.parent.rmdir()
-        report['finished_at'] = datetime.now(timezone.utc).isoformat()
-        RESULT.write_text(json.dumps(report, indent=2) + '\n')
-        print('Artifact:', RESULT)
-
-
 if __name__ == '__main__':
-    main()
+    SMOKE.run(exercise, 'graphify-worktree-smoke-')

@@ -1,36 +1,18 @@
 """Real Git/MCP lifecycle checks using disposable checkouts and hook scripts."""
-import asyncio
 import hashlib
 import json
-import os
-from pathlib import Path
 import subprocess
 import sys
-import tempfile
-from datetime import datetime, timezone
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import get_default_environment, stdio_client
+from mcp import ClientSession
+from mcp.client.stdio import stdio_client
 
 from graphify_worktree import cli
 from graphify_worktree.policy import PolicyError
+from support import WRAPPER, Smoke, command, git, init_repo, server, wrapper_json
 
-BIN = Path(os.environ.get('GRAPHIFY_WORKTREE_BIN') or Path(sys.executable).parent)
-WRAPPER = BIN / 'graphify-worktree'
-MCP = BIN / 'graphify-worktree-mcp'
-RESULT = Path(__file__).with_name('lifecycle-smoke-result.json')
-CHECKS = []
-
-
-def command(*args, expected=0, env=None, input=None):
-    result = subprocess.run([str(a) for a in args], capture_output=True, text=True,
-                            timeout=180, env=env, input=input)
-    assert expected is None or result.returncode == expected, (args, result.returncode, result.stdout, result.stderr)
-    return result
-
-
-def git(root, *args, **kwargs):
-    return command('git', '-C', root, *args, **kwargs)
+SMOKE = Smoke('lifecycle-smoke')
+passed = SMOKE.passed
 
 
 def graph_path(root):
@@ -42,31 +24,15 @@ def digest(path):
 
 
 def status(root, expected=0):
-    return json.loads(command(WRAPPER, 'status', root, expected=expected).stdout)
+    return wrapper_json('status', root, expected=expected)
 
 
 def ensure(root):
-    return json.loads(command(WRAPPER, 'ensure', root).stdout)
+    return wrapper_json('ensure', root)
 
 
 def generation(root):
     return json.loads((root / 'graphify-out/.graphify-worktree.json').read_text())['extracted_at']
-
-
-def passed(name):
-    CHECKS.append(name)
-    print('PASS:', name, flush=True)
-
-
-def isolate_vaults(folder):
-    """Point both vault roots into the disposable folder; never the user's vaults."""
-    os.environ['WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT'] = str(folder / 'vaults/Graphify')
-    os.environ['WORKTREE_KNOWLEDGE_MEMORY_VAULT'] = str(folder / 'vaults/Engineering')
-
-
-def server(command):
-    vaults = {key: os.environ[key] for key in ('WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT', 'WORKTREE_KNOWLEDGE_MEMORY_VAULT')}
-    return StdioServerParameters(command=str(command), env={**get_default_environment(), **vaults})
 
 
 def write_hook(path, event, log, exit_code=0):
@@ -82,16 +48,14 @@ def write_hook(path, event, log, exit_code=0):
 async def exercise(base):
     root = base / 'main'
     root.mkdir()
-    git(root, 'init', '-b', 'main')
-    git(root, 'config', 'user.email', 'lifecycle-smoke@localhost')
-    git(root, 'config', 'user.name', 'Lifecycle smoke')
+    init_repo(root, 'lifecycle-smoke')
     source = root / 'quote.py'
     source.write_text('def primary_quote():\n    return 100\n')
     git(root, 'add', 'quote.py')
     git(root, 'commit', '-m', 'Initial lifecycle source')
     command(WRAPPER, 'configure', 'graph', root)
 
-    async with stdio_client(server(MCP)) as streams:
+    async with stdio_client(server()) as streams:
         async with ClientSession(*streams) as session:
             await session.initialize()
 
@@ -250,23 +214,5 @@ async def exercise(base):
             passed('Uninstall refuses to overwrite hooksPath changes made outside the harness')
 
 
-def main():
-    report = {'started_at': datetime.now(timezone.utc).isoformat(), 'checks': CHECKS}
-    try:
-        with tempfile.TemporaryDirectory(prefix='knowledge-lifecycle-smoke-') as folder, \
-                tempfile.TemporaryDirectory(prefix='worktree-knowledge-vaults-') as vaults:
-            # Outside every disposable repository so vault files never enter a scan.
-            isolate_vaults(Path(vaults).resolve())
-            asyncio.run(exercise(Path(folder).resolve()))
-        report['passed'] = True
-    except BaseException as error:
-        report.update(passed=False, error=repr(error))
-        raise
-    finally:
-        report['finished_at'] = datetime.now(timezone.utc).isoformat()
-        RESULT.write_text(json.dumps(report, indent=2) + '\n')
-        print('Artifact:', RESULT)
-
-
 if __name__ == '__main__':
-    main()
+    SMOKE.run(exercise, 'knowledge-lifecycle-smoke-')
