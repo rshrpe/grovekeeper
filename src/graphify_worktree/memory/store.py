@@ -18,7 +18,8 @@ ORIGIN = ("date", "created_at", "repository", "common_git_dir", "worktree", "bra
 AUDIT = ("action", "at", "recorded_by", "source", "confirmation", "worktree", "branch", "commit")
 FIELDS = {"schema_version", "id", "kind", "title", "status", "superseded_by", *ORIGIN,
           *("audit_" + field for field in AUDIT)}
-OPTIONAL = ("verify_by", "stale_after")  # review dates; absent unless set
+REVIEW = ("verify_by", "stale_after")  # review dates; absent unless set
+OPTIONAL = (*REVIEW, "scope")  # scope is present only on general notes, always "general"
 AUDIT_ACTIONS = ("save", "accept", "supersede", "verify")
 
 
@@ -90,17 +91,27 @@ def parse_frontmatter(document):
     return metadata, content
 
 
-def validate(metadata, content, expected_id, repo):
+def validate(metadata, content, expected_id, repo, scope="repository"):
     if not FIELDS <= metadata.keys() <= FIELDS | set(OPTIONAL):
         raise MemoryRequestError("unexpected or missing frontmatter properties")
-    for key in OPTIONAL:
+    for key in REVIEW:
         if key in metadata:
             iso_date(metadata[key], key)
     if type(metadata["schema_version"]) is not int or metadata["schema_version"] != 1:
         raise MemoryRequestError("unsupported memory schema version")
     if metadata["id"] != expected_id:
         raise MemoryRequestError("note id does not match filename")
-    if metadata["repository"] != repo["id"] or metadata["common_git_dir"] != repo["common_git_dir"]:
+    if scope == "general":
+        # Shared across repositories: origin is recorded but not enforced.
+        if metadata.get("scope") != "general":
+            raise MemoryRequestError("not a general note; repository notes never apply across repositories")
+        if metadata["status"] not in ("accepted", "superseded"):
+            raise MemoryRequestError("general notes must be accepted")
+        text(metadata["repository"], "repository")
+        text(metadata["common_git_dir"], "common_git_dir")
+    elif "scope" in metadata:
+        raise MemoryRequestError("general notes belong in General/Memory, not in a repository's memory")
+    elif metadata["repository"] != repo["id"] or metadata["common_git_dir"] != repo["common_git_dir"]:
         raise MemoryRequestError("note belongs to another repository")
     for key in ("title", "date", "created_at", "worktree", "source", "confirmation"):
         text(metadata[key], key)
@@ -138,7 +149,7 @@ def validate(metadata, content, expected_id, repo):
     text(content, "content")
 
 
-def load(fd, identifier, repo):
+def load(fd, identifier, repo, scope="repository"):
     filename = note_id(identifier) + ".md"
     try:
         note_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
@@ -146,7 +157,7 @@ def load(fd, identifier, repo):
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise MemoryRequestError("note must be a regular file")
             metadata, content = parse_frontmatter(stream.read())
-        validate(metadata, content, identifier, repo)
+        validate(metadata, content, identifier, repo, scope)
         return metadata, content
     except (OSError, UnicodeError, MemoryRequestError) as error:
         raise MemoryRequestError(f"cannot read memory note {filename}: {error}") from error

@@ -119,6 +119,10 @@ ACTIONS = {action.name: action for action in (
             "status": {"type": "string", "enum": ["proposed", "accepted"], "default": "proposed"},
             "pr": TEXT,
             **REVIEW_DATES,
+            "scope": {
+                "type": "string", "enum": ["repository", "general"], "default": "repository",
+                "description": "general (only when enabled, and only for accepted notes the user approved for all repositories) stores a lesson in General/Memory, searched after repository notes everywhere.",
+            },
             "duplicate_ok": {
                 "type": "boolean", "default": False,
                 "description": "A save whose title nearly matches a current note is refused and returns those notes. Set true only after the user saw them and still wants a separate note.",

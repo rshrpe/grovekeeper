@@ -63,6 +63,7 @@ The skill is an operational guard on the managed tools, not a filesystem sandbox
 | `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI` | `~/.local/bin/obsidian` | Native Obsidian CLI for `export --open` |
 | `WORKTREE_KNOWLEDGE_SKILL_DIR` | `~/.agents/skills/worktree-knowledge` | Where the installer links the skill |
 | `WORKTREE_KNOWLEDGE_STATE_DIR` | `~/.local/state/grovekeeper` | Per-session counters of the optional pre-tool nudge |
+| `WORKTREE_KNOWLEDGE_GENERAL_MEMORY` | unset | `1` enables general-scope lessons in `General/Memory/`, searched after repository notes |
 | `WORKTREE_KNOWLEDGE_INCREMENTAL` | unset | `1` makes rebuilds incremental (seeded upstream extract; full on any doubt) |
 | `HARNESS_KNOWLEDGE_MODE` | `default` | `off` disables knowledge for the process |
 

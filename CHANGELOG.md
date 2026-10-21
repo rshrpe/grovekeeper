@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Added in Phase 3: opt-in general-scope lessons (needs sign-off)
+- **`WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1` enables lessons shared by every repository,** stored in `General/Memory/` of the memory vault. Unset or any other value: general notes are neither saved nor read, and memory behaves exactly as before.
+- **Saving:** `memory_save` takes `scope` (`repository` by default, or `general`). A general note must be saved as `accepted` (explicit cross-repository approval). Its originating repository, worktree, branch and commit are still recorded, and the frontmatter gains `scope: "general"`. Repository notes and their files are byte-identical to before.
+- **Reading:**
+  - Search returns the current repository's notes first, then general lessons, within one `limit`; general results carry `scope: "general"`.
+  - Get, verify and supersede find a general note by id from any repository.
+  - A supersede replacement must be in the same scope.
+  - The near-duplicate check compares within the same scope.
+- **Isolation:** the expected scope is checked on every load. A general note found in a repository's folder, or a repository note copied into `General/Memory`, is rejected like any foreign note, and search names it in `warnings`.
+- **Consent:** reading or writing general notes needs Obsidian consent in the current repository, like all memory. Session-start recall, `memory_lint` and the dashboard stay repository-only.
+- **MCP tool surface:** `memory_save` gains only the optional `scope` property.
+
 ### Added in Phase 3: worktree graph diff (needs sign-off)
 - **`graphify-worktree diff A B [--limit N] [--once]`** compares two worktrees' graphs of the same repository.
   - **Freshness:** each side is made fresh and read under its own `guarded_graph`, one after the other: consent, worktree lock, rebuild if needed, result withheld if that side changes during its read.

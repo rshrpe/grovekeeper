@@ -455,6 +455,15 @@
           ],
           "type": "string"
         },
+        "scope": {
+          "default": "repository",
+          "description": "general (only when enabled, and only for accepted notes the user approved for all repositories) stores a lesson in General/Memory, searched after repository notes everywhere.",
+          "enum": [
+            "repository",
+            "general"
+          ],
+          "type": "string"
+        },
         "source": {
           "description": "Evidence or source context supporting this note.",
           "minLength": 1,

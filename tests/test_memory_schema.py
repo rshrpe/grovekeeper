@@ -26,7 +26,7 @@ def test_mcp_tool_definition_matches_captured_surface(action):
     ("search", {"query": "retry"}, {"query": "retry", "limit": 5, "include_history": False}),
     ("get", {"id": NOTE_ID}, {"id": NOTE_ID}),
     ("save", {"kind": "fact", "title": "t", "content": "c", **WRITE},
-     {"kind": "fact", "title": "t", "content": "c", **WRITE, "status": "proposed", "duplicate_ok": False}),
+     {"kind": "fact", "title": "t", "content": "c", **WRITE, "status": "proposed", "duplicate_ok": False, "scope": "repository"}),
 ])
 def test_defaults_are_applied(action, arguments, expected):
     assert schema.validate(action, arguments) == expected

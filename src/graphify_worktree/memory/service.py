@@ -32,14 +32,40 @@ def _checkout(root):
     return {"branch": state["branch"], "commit": state["head"]}
 
 
-def memory_directory(repo):
+def _vault():
     vault = settings.memory_vault()
     if ".." in vault.parts:
         raise MemoryRequestError("vault must be an absolute path without parent traversal")
-    return vault / "Projects" / (repo["name"] + "-" + repo["id"]) / "Memory"
+    return vault
+
+
+def memory_directory(repo):
+    return _vault() / "Projects" / (repo["name"] + "-" + repo["id"]) / "Memory"
+
+
+def general_directory():
+    """Opt-in lessons shared by every repository (WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1)."""
+    return _vault() / "General" / "Memory"
+
+
+def _directory(scope, repo):
+    return general_directory() if scope == "general" else memory_directory(repo)
+
+
+def _scope_of(identifier, repo):
+    """Where an existing note lives: its repository first, then General/Memory when enabled."""
+    name = identifier + ".md"
+    if settings.general_memory() and not (memory_directory(repo) / name).exists() \
+            and (general_directory() / name).exists():
+        return "general"
+    return "repository"
 
 
 def _applicability(metadata, repo):
+    if metadata.get("scope") == "general":
+        if metadata["status"] == "accepted":
+            return True, "accepted for all repositories (general)"
+        return False, "historical: superseded by " + metadata["superseded_by"]
     if metadata["status"] == "accepted":
         return True, "accepted repository-wide"
     if metadata["status"] == "superseded":
@@ -68,13 +94,13 @@ def similar_titles(first, second):
     return shared >= 2 and shared / len(a | b) >= 0.5 and shared / min(len(a), len(b)) >= 0.75
 
 
-def _duplicates(fd, title, repo, directory):
+def _duplicates(fd, title, repo, directory, scope):
     found = []
     for filename in sorted(os.listdir(fd)):
         if not filename.endswith(".md"):
             continue
         try:
-            metadata, _ = store.load(fd, filename[:-3], repo)
+            metadata, _ = store.load(fd, filename[:-3], repo, scope)
         except MemoryRequestError:
             continue
         if metadata["status"] != "superseded" and similar_titles(title, metadata["title"]):
@@ -87,7 +113,7 @@ def _duplicates(fd, title, repo, directory):
 
 def _freshness(metadata):
     """Review-date state, or None for a note without review dates."""
-    if not any(key in metadata for key in store.OPTIONAL):
+    if not any(key in metadata for key in store.REVIEW):
         return None
     verify_by, stale_after = metadata.get("verify_by"), metadata.get("stale_after")
     now = today()
@@ -102,7 +128,7 @@ def _freshness(metadata):
 
 def _review_dates(args):
     """The requested review dates, which must lie ahead and in order."""
-    dates = {key: args[key] for key in store.OPTIONAL if key in args}
+    dates = {key: args[key] for key in store.REVIEW if key in args}
     for key, value in dates.items():
         if date.fromisoformat(value) < today():
             raise MemoryRequestError(f"{key} must not be in the past")
@@ -119,6 +145,8 @@ def _result(metadata, content, repo, directory, *, snippet=None):
     freshness = _freshness(metadata)
     if freshness is not None:
         result["freshness"] = freshness
+    if metadata.get("scope") == "general":
+        result["scope"] = "general"
     if snippet is None:
         result.update(content=content, metadata=metadata)
     else:
@@ -134,7 +162,7 @@ def _snippet(content, terms):
     return ("…" if start else "") + text[start:start + 480] + ("…" if len(text) > start + 480 else "")
 
 
-def _search(fd, args, repo, directory, warnings):
+def _search(fd, args, repo, directory, warnings, scope="repository"):
     terms = set(re.findall(r"\w+", args["query"].casefold()))
     if not terms:
         raise MemoryRequestError("query must contain a word or number")
@@ -143,7 +171,7 @@ def _search(fd, args, repo, directory, warnings):
         if not filename.endswith(".md"):
             continue
         try:
-            metadata, content = store.load(fd, filename[:-3], repo)
+            metadata, content = store.load(fd, filename[:-3], repo, scope)
         except MemoryRequestError as error:
             # One hand-edited or foreign note must not hide every other note.
             warnings.append(f"skipped unreadable note {filename}: {error}")
@@ -210,16 +238,33 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
     effective_session = "off" if os.environ.get("HARNESS_KNOWLEDGE_MODE") == "off" else session_mode
     require(root, capability="obsidian", once=once, session_mode=effective_session)
     args = validate(action, arguments)
+    if action == "save" and args["scope"] == "general":
+        if not settings.general_memory():
+            raise MemoryRequestError("general memory is off; set WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1 to save scope general")
+        if args["status"] != "accepted":
+            raise MemoryRequestError("general notes must be saved as accepted, after explicit approval for all repositories")
     try:
         repo = repository(root)
-        directory = memory_directory(repo)
+        if action == "save":
+            scope = args["scope"]
+        elif "id" in args:
+            scope = _scope_of(args["id"], repo)
+        else:
+            scope = "repository"
+        directory = _directory(scope, repo)
         result = {"repo": repo, "warnings": [WARNING]}
+        general = []
+        if action == "search" and settings.general_memory():
+            with store.directory(general_directory(), create=False, writing=False) as fd:
+                general = _search(fd, args, repo, general_directory(), result["warnings"], "general")
         writing = ACTIONS[action].writes
         # Only saving new content may create storage. Failed lifecycle operations
         # against a missing note must not leave directories behind.
         with store.directory(directory, create=action == "save", writing=writing) as fd:
             if action == "search":
-                result["notes"] = _search(fd, args, repo, directory, result["warnings"])
+                # Repository notes first, then general lessons, within one limit.
+                own = _search(fd, args, repo, directory, result["warnings"])
+                result["notes"] = (own + general)[:args["limit"]]
                 return result
             if action == "lint":
                 return {**result, **_lint(fd, root, repo, directory)}
@@ -227,7 +272,7 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
                 raise MemoryRequestError("memory note does not exist")
             now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
             if action == "save":
-                duplicates = _duplicates(fd, args["title"], repo, directory)
+                duplicates = _duplicates(fd, args["title"], repo, directory, scope)
                 named = "; ".join(f'{note["id"]} "{note["title"]}" ({note["status"]})' for note in duplicates)
                 if duplicates and not args["duplicate_ok"]:
                     raise DuplicateNoteError(
@@ -242,12 +287,12 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
                             **{key: repo[key] for key in ("worktree", "branch", "commit")},
                             "source": args["source"], "recorded_by": args["recorded_by"],
                             "pr": args.get("pr"), "confirmation": args["confirmation"], "superseded_by": None,
-                            **_review_dates(args)}
+                            **_review_dates(args), **({"scope": "general"} if scope == "general" else {})}
                 content = args["content"]
                 store.append_event(metadata, "save", args, repo, now)
                 store.write(fd, metadata, content)
             else:
-                metadata, content = store.load(fd, args["id"], repo)
+                metadata, content = store.load(fd, args["id"], repo, scope)
                 if action == "accept":
                     if metadata["status"] == "superseded":
                         raise MemoryRequestError("superseded notes cannot be accepted; save a new note")
@@ -259,7 +304,7 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
                     if metadata["status"] == "superseded":
                         raise MemoryRequestError("superseded notes cannot be verified; save and accept a replacement")
                     dates = _review_dates(args)
-                    for key in store.OPTIONAL:
+                    for key in store.REVIEW:
                         metadata.pop(key, None)
                     metadata.update(dates)
                     store.append_event(metadata, "verify", args, repo, now)
@@ -267,7 +312,10 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
                 elif action == "supersede":
                     if args["replacement_id"] == args["id"]:
                         raise MemoryRequestError("a note cannot supersede itself")
-                    replacement, _ = store.load(fd, args["replacement_id"], repo)
+                    try:
+                        replacement, _ = store.load(fd, args["replacement_id"], repo, scope)
+                    except MemoryRequestError as error:
+                        raise MemoryRequestError(f"replacement must be an accepted note in the same scope ({scope}): {error}") from error
                     if replacement["status"] != "accepted":
                         raise MemoryRequestError("replacement must be an accepted note in the same repository")
                     if metadata["status"] == "superseded":

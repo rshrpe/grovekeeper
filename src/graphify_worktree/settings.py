@@ -45,6 +45,11 @@ def state_dir():
     return _path("WORKTREE_KNOWLEDGE_STATE_DIR", ".local/state/grovekeeper")
 
 
+def general_memory():
+    """Opt-in general-scope lessons (General/Memory/): only the exact value "1" enables them."""
+    return os.environ.get("WORKTREE_KNOWLEDGE_GENERAL_MEMORY") == "1"
+
+
 def incremental():
     """Opt-in incremental rebuilds: only the exact value "1" enables them."""
     return os.environ.get("WORKTREE_KNOWLEDGE_INCREMENTAL") == "1"
