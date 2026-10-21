@@ -133,7 +133,9 @@ async def exercise(base):
     assert original['id'] in ids(memory('search', alternate, query='payment retry'))
     passed('Repository isolation and explicit acceptance preserve origin provenance')
 
-    replacement = saved(root, write_payload('decision', 'Revised payment retry ceiling', 'Use five payment retry attempts.', 'accepted'))
+    # A replacement resembles the note it supersedes; the user approved replacing it.
+    replacement = saved(root, {**write_payload('decision', 'Revised payment retry ceiling', 'Use five payment retry attempts.', 'accepted'),
+                               'duplicate_ok': True})
     before_bad = Path(original['path']).read_bytes()
     memory('supersede', root, transition(original['id'], replacement_id=original['id']), expected=1)
     memory('supersede', root, transition(original['id'], replacement_id=lesson['id']), expected=1)

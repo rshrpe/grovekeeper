@@ -119,6 +119,10 @@ ACTIONS = {action.name: action for action in (
             "status": {"type": "string", "enum": ["proposed", "accepted"], "default": "proposed"},
             "pr": TEXT,
             **REVIEW_DATES,
+            "duplicate_ok": {
+                "type": "boolean", "default": False,
+                "description": "A save whose title nearly matches a current note is refused and returns those notes. Set true only after the user saw them and still wants a separate note.",
+            },
             **APPROVAL,
         },
         ("kind", "title", "content", "source", "recorded_by", "confirmed", "confirmation"),

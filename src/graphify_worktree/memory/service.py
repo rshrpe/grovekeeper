@@ -7,7 +7,7 @@ import re
 import uuid
 
 from graphify_worktree import gitutil, settings
-from graphify_worktree.errors import MemoryRequestError
+from graphify_worktree.errors import DuplicateNoteError, MemoryRequestError
 from graphify_worktree.memory import store
 from graphify_worktree.memory.schema import ACTIONS, validate
 from graphify_worktree.policy import require, resolve_root
@@ -52,6 +52,37 @@ def _applicability(metadata, repo):
             and metadata["commit"] == repo["commit"]):
         return True, "proposed at current detached worktree and commit"
     return False, "historical: proposed at another detached worktree or commit"
+
+
+def _words(text):
+    return re.findall(r"\w+", text.casefold())
+
+
+def similar_titles(first, second):
+    """Same words, or mostly the same words (the search scorer's tokenization)."""
+    a, b = _words(first), _words(second)
+    if a == b:
+        return True
+    a, b = set(a), set(b)
+    shared = len(a & b)
+    return shared >= 2 and shared / len(a | b) >= 0.5 and shared / min(len(a), len(b)) >= 0.75
+
+
+def _duplicates(fd, title, repo, directory):
+    found = []
+    for filename in sorted(os.listdir(fd)):
+        if not filename.endswith(".md"):
+            continue
+        try:
+            metadata, _ = store.load(fd, filename[:-3], repo)
+        except MemoryRequestError:
+            continue
+        if metadata["status"] != "superseded" and similar_titles(title, metadata["title"]):
+            applicable, applicability = _applicability(metadata, repo)
+            found.append({key: metadata[key] for key in ("id", "title", "status")}
+                         | {"applicable": applicable, "applicability": applicability,
+                            "path": str(directory / filename)})
+    return found
 
 
 def _freshness(metadata):
@@ -145,6 +176,13 @@ def _lint(fd, root, repo, directory):
         findings.append({"issue": issue, "id": metadata["id"], "title": metadata["title"],
                          "path": str(directory / (metadata["id"] + ".md")), "detail": detail})
 
+    current = sorted((metadata for metadata in notes.values() if metadata["status"] != "superseded"),
+                     key=lambda metadata: metadata["id"])
+    for index, metadata in enumerate(current):
+        for other in current[index + 1:]:
+            if similar_titles(metadata["title"], other["title"]):
+                finding(metadata, "near_duplicate", f'title nearly matches "{other["title"]}" ({other["id"]})')
+                findings[-1]["duplicate_of"] = other["id"]
     for metadata in notes.values():
         if metadata["status"] == "superseded":
             replacement = notes.get(metadata["superseded_by"])
@@ -189,6 +227,15 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
                 raise MemoryRequestError("memory note does not exist")
             now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
             if action == "save":
+                duplicates = _duplicates(fd, args["title"], repo, directory)
+                named = "; ".join(f'{note["id"]} "{note["title"]}" ({note["status"]})' for note in duplicates)
+                if duplicates and not args["duplicate_ok"]:
+                    raise DuplicateNoteError(
+                        f"possible duplicate of {named}; nothing was saved. Show these to the user: update or "
+                        "supersede one of them, or resend with duplicate_ok: true only if they still want a "
+                        "separate note", duplicates)
+                if duplicates:
+                    result["warnings"].append(f"saved despite possible duplicates: {named}")
                 metadata = {"schema_version": 1, "id": str(uuid.uuid4()), "kind": args["kind"],
                             "title": args["title"], "status": args["status"], "date": now[:10],
                             "created_at": now, "repository": repo["id"], "common_git_dir": repo["common_git_dir"],

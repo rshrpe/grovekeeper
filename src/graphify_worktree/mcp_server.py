@@ -169,7 +169,10 @@ def build_server():
         except PolicyError as error:
             return denied(error)
         except KnowledgeError as error:
-            return result({"error": "invalid_memory_request", "reason": str(error)}, error=True)
+            payload = {"error": "invalid_memory_request", "reason": str(error)}
+            if getattr(error, "duplicates", None):
+                payload["duplicates"] = error.duplicates
+            return result(payload, error=True)
         except Exception as error:
             return result({"error": "memory_operation_failed", "reason": str(error)}, error=True)
 

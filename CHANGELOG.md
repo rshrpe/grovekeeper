@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
+### Changed in Phase 3: near-duplicate check on memory save (needs sign-off)
+- **`memory_save` refuses a near-duplicate title** unless the request has `duplicate_ok: true` (new optional boolean, default false). The check runs under the save's exclusive memory lock, against every readable, non-superseded note of the repository, including proposals on other branches.
+  - **Titles are compared word by word,** with the search scorer's tokenization. They match when the words are identical, or when at least two words are shared, the shared words are at least half of all words and at least three quarters of the shorter title. So "Retry ceiling is three" matches "Retry ceiling is 3", but "Use three retries" doesn't match "Use three workers", and "Retry policy" doesn't match "Retry policy for webhooks differs".
+  - **A refusal writes nothing.** MCP returns `invalid_memory_request` with a new `duplicates` list (id, title, status, applicable, applicability, path). The CLI exits 1 and names them on stderr.
+  - **With `duplicate_ok: true`** the note is saved and `warnings` names the matches.
+  - Unreadable notes never block a save.
+- **Behaviour change:** a save that used to succeed now fails when a current note has a nearly identical title. That includes the replacement in a save-then-supersede flow, which passes `duplicate_ok: true` for the note it replaces (as the memory smoke now does).
+- **`memory_lint`** also reports each pair of current notes with nearly the same title (`near_duplicate`, with `duplicate_of`).
+- **MCP tool surface:** `memory_save` gains only the optional `duplicate_ok` property.
+
 ### Added in Phase 3: memory review dates, verify and lint (needs sign-off)
 - **Review dates.** `memory_save` takes optional `verify_by` and `stale_after` UTC dates (`YYYY-MM-DD`; not in the past; `stale_after` not before `verify_by`). They are stored as optional frontmatter properties of schema version 1 and are only written when set.
   - Search and get add `freshness` (`verify_by`, `stale_after`, `state`: `current`, `verify_due` or `stale`) only for notes that have a date, so results and files for existing notes are byte-identical.

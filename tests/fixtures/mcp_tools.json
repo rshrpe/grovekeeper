@@ -425,6 +425,11 @@
           "minLength": 1,
           "type": "string"
         },
+        "duplicate_ok": {
+          "default": false,
+          "description": "A save whose title nearly matches a current note is refused and returns those notes. Set true only after the user saw them and still wants a separate note.",
+          "type": "boolean"
+        },
         "kind": {
           "enum": [
             "decision",

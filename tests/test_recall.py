@@ -28,10 +28,10 @@ def repo(tmp_path, home, monkeypatch):
     return root.resolve()
 
 
-def save(root, title, *, status="accepted", content="Body."):
+def save(root, title, *, status="accepted", content="Body.", duplicate_ok=False):
     return handle("save", root, {"kind": "decision", "title": title, "content": content, "source": "test",
                                  "recorded_by": "manual", "status": status, "confirmed": True,
-                                 "confirmation": "test approval"})["note"]
+                                 "confirmation": "test approval", "duplicate_ok": duplicate_ok})["note"]
 
 
 def test_lists_accepted_titles_and_ids_framed_as_untrusted_evidence(repo):
@@ -65,7 +65,7 @@ def test_most_recently_accepted_note_comes_first(repo):
 
 def test_output_is_bounded_and_says_how_many_were_left_out(repo):
     for number in range(40):
-        save(repo, f"Accepted decision number {number:02} about a fairly long subject")
+        save(repo, f"Accepted decision number {number:02} about a fairly long subject", duplicate_ok=True)
     text = recall.session_context(repo)
     assert len(text) <= 1000
     listed = text.count("\n- \"")

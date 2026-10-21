@@ -34,6 +34,14 @@ class MemoryRequestError(KnowledgeError):
     """Invalid memory input, lifecycle transition, note or storage."""
 
 
+class DuplicateNoteError(MemoryRequestError):
+    """A save was refused because current notes have nearly the same title."""
+
+    def __init__(self, reason, duplicates):
+        super().__init__(reason)
+        self.duplicates = duplicates
+
+
 class LearningRequestError(KnowledgeError):
     """Invalid work-memory (save-result/reflect) input."""
 
