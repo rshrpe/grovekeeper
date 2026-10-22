@@ -61,7 +61,7 @@ The MCP server writes one line to stderr when it starts (versions, vault roots, 
 
 ## 5. Upgrade
 
-Pull the checkout and run `./install.sh` again. To move to a new Graphify or MCP release: change the pins in `pyproject.toml` and `PINS` in `src/graphify_worktree/upstream.py`, run `uv lock`, `uv run pytest` and the smokes, then reinstall. Graphs built by an older Graphify become stale and are rebuilt on next use.
+Pull the checkout and run `./install.sh` again. To move to a new Graphify or MCP release: change the pins in `pyproject.toml` and `PINS` in `src/graphify_worktree/upstream.py` and run `uv lock`. Then run `uv run pytest tests/test_upstream_contract.py` first: it checks every private upstream function, attribute and data format this package relies on, and a failure names the touchpoint that moved. After that, run `uv run pytest` and the smokes, then reinstall. Graphs built by an older Graphify become stale and are rebuilt on next use.
 
 ## 6. Uninstall
 
