@@ -176,7 +176,8 @@ class HookSpec:
 
 # Claude Code and Codex share this hook schema and both treat a failing or slow
 # hook as non-blocking. Both commands always exit 0 and never deny a tool call.
-RECALL_HOOK = HookSpec("SessionStart", "startup|clear|compact", "recall", "session-start recall")
+# SessionStart sources: Claude Code startup|resume|clear|compact|fork, Codex the same without fork.
+RECALL_HOOK = HookSpec("SessionStart", "startup|resume|clear|compact|fork", "recall", "session-start recall")
 NUDGE_HOOK = HookSpec("PreToolUse", "^(Grep|Glob|Read|Bash|mcp__graphify__.*)$", "nudge", "pre-tool nudge")
 HOOK_TIMEOUT_SEC = 5
 HOOK_FILES = {"claude": ".claude/settings.json", "codex": ".codex/hooks.json"}

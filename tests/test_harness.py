@@ -348,13 +348,19 @@ def test_install_skips_absent_harnesses(home, tmp_path, checkout, fake_claude):
 RECALL = "/bin/graphify-worktree recall"
 OURS = {"type": "command", "command": RECALL, "timeout": 5}
 SUPERPOWERS = {"matcher": "startup", "hooks": [{"type": "command", "command": "other-session-hook"}]}
+# Claude Code's SessionStart sources; Codex has the same minus fork.
+RECALL_MATCHER = "startup|resume|clear|compact|fork"
+
+
+def test_session_recall_runs_on_every_session_start_source_including_resume_and_fork():
+    assert harness.RECALL_HOOK.matcher == RECALL_MATCHER
 
 
 def test_session_hook_added_beside_existing_hooks_without_mutating_input():
     data = {"model": "x", "hooks": {"SessionStart": [SUPERPOWERS], "PreToolUse": [{"hooks": []}]}}
     result = harness.upsert_hook(harness.RECALL_HOOK, data, RECALL)
     assert result == {"model": "x", "hooks": {
-        "SessionStart": [SUPERPOWERS, {"matcher": "startup|clear|compact", "hooks": [OURS]}],
+        "SessionStart": [SUPERPOWERS, {"matcher": RECALL_MATCHER, "hooks": [OURS]}],
         "PreToolUse": [{"hooks": []}]}}
     assert data["hooks"]["SessionStart"] == [SUPERPOWERS]
 
@@ -364,7 +370,7 @@ def test_session_hook_upsert_is_idempotent_and_repairs_our_entry_in_place():
     assert harness.upsert_hook(harness.RECALL_HOOK, once, RECALL) == once
     drifted = {"hooks": {"SessionStart": [{"matcher": "startup", "hooks": [{**OURS, "timeout": 60}]}, SUPERPOWERS]}}
     assert harness.upsert_hook(harness.RECALL_HOOK, drifted, RECALL) == {"hooks": {"SessionStart": [
-        {"matcher": "startup|clear|compact", "hooks": [OURS]}, SUPERPOWERS]}}
+        {"matcher": RECALL_MATCHER, "hooks": [OURS]}, SUPERPOWERS]}}
 
 
 def test_session_hook_removal_keeps_other_handlers_and_drops_empty_containers():
