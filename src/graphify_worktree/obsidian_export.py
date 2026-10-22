@@ -14,6 +14,8 @@ from graphify_worktree.errors import GraphError
 from graphify_worktree.freshness import inspect
 
 
+PAGE = 100  # links per Canvas page; graph.canvas links at most PAGE pages of PAGE communities
+
 def export_canvas(vault, graph, communities, labels):
     if graph.number_of_nodes() <= 5000:
         upstream.to_canvas(graph, communities, str(vault / "graph.canvas"), community_labels=labels)
@@ -24,6 +26,9 @@ def export_canvas(vault, graph, communities, labels):
         # instead of rendering every symbol; all native notes and MCP data remain.
         targets = sorted(name for name in artifacts.load_json(vault / ".graphify_obsidian_manifest.json")["files"]
                          if name.startswith("_COMMUNITY_") and name.endswith(".md"))
+        if len(targets) > PAGE * PAGE:
+            raise GraphError(f"{len(targets):,} communities exceed the {PAGE * PAGE:,} a one-level Canvas index "
+                             "can link; the community notes and MCP still cover the whole graph")
         keep = set()
 
         def page(path, links, overview=False):
@@ -46,20 +51,14 @@ def export_canvas(vault, graph, communities, labels):
             finally:
                 temporary.unlink(missing_ok=True)
 
-        level = 0
-        while True:
-            links = []
-            for index, start in enumerate(range(0, len(targets), 100)):
-                relative = f"_graphify-worktree/communities-{level}-{index + 1:04}.canvas"
-                destination = vault / relative
-                page(destination, targets[start:start + 100])
-                keep.add(destination)
-                links.append(relative)
-            if len(links) <= 100:
-                page(vault / "graph.canvas", links, overview=True)
-                break
-            targets = links
-            level += 1
+        links = []
+        for index, start in enumerate(range(0, len(targets), PAGE)):
+            relative = f"_graphify-worktree/communities-0-{index + 1:04}.canvas"
+            destination = vault / relative
+            page(destination, targets[start:start + PAGE])
+            keep.add(destination)
+            links.append(relative)
+        page(vault / "graph.canvas", links, overview=True)
         mode = "community-index"
     for previous in (vault / "_graphify-worktree").glob("communities-*.canvas"):
         if previous not in keep:
