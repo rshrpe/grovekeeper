@@ -3,11 +3,15 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 
 import pytest
 
-from graphify_worktree import artifacts, cli, incremental, settings, upstream
+from graphify_worktree import artifacts, cli, incremental, policy, upstream
 from graphify_worktree.guard import ensure
+
+from integration import isolated_env
 
 pytestmark = [pytest.mark.integration, pytest.mark.repo(mode="graph", files={
     "pkg/a.py": "from pkg.b import beta\n\n\ndef alpha():\n    return beta()\n",
@@ -16,9 +20,12 @@ pytestmark = [pytest.mark.integration, pytest.mark.repo(mode="graph", files={
 })]
 
 
-@pytest.fixture(autouse=True)
-def incremental_on(monkeypatch):
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_INCREMENTAL", "1")
+@pytest.fixture
+def repo(repo, monkeypatch):
+    monkeypatch.delenv("WORKTREE_KNOWLEDGE_INCREMENTAL", raising=False)
+    policy.configure(repo, incremental=True)
+    return repo
+
 
 SEEDS = ".graphify-worktree-seed"
 
@@ -46,23 +53,34 @@ def seeds(repo):
 
 def full_rebuild_of(repo, monkeypatch, capfd):
     """The graph a full extract produces for the current sources (incremental disabled)."""
-    monkeypatch.delenv("WORKTREE_KNOWLEDGE_INCREMENTAL")
+    policy.configure(repo, incremental=False)
     assert cli.main(["refresh", str(repo)]) == 0
     capfd.readouterr()
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_INCREMENTAL", "1")
+    policy.configure(repo, incremental=True)
     return graph(repo)
 
 
-def test_the_setting_is_on_only_for_1(monkeypatch):
+def test_the_deprecated_variable_is_on_only_for_1_and_only_while_the_key_is_unset(make_repo, monkeypatch):
+    root = make_repo("plain")
     for value, enabled in (("1", True), ("0", False), ("", False), ("true", False)):
         monkeypatch.setenv("WORKTREE_KNOWLEDGE_INCREMENTAL", value)
-        assert settings.incremental() is enabled
-    monkeypatch.delenv("WORKTREE_KNOWLEDGE_INCREMENTAL")
-    assert settings.incremental() is False
+        assert policy.settings(root)["incremental"] is enabled
+    policy.configure(root, incremental=False)
+    monkeypatch.setenv("WORKTREE_KNOWLEDGE_INCREMENTAL", "1")
+    assert policy.settings(root)["incremental"] is False
 
 
-def test_disabled_builds_are_unchanged_full_builds_without_seeds(repo, monkeypatch):
-    monkeypatch.delenv("WORKTREE_KNOWLEDGE_INCREMENTAL")
+def test_a_build_by_a_process_without_the_variable_stays_incremental(repo, tmp_path):
+    ensure(repo)
+    (repo / "pkg/b.py").write_text("def beta():\n    return 2\n")
+    env = isolated_env(tmp_path / "home", WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT=str(tmp_path / "vaults"))
+    subprocess.run([sys.executable, "-m", "graphify_worktree.cli", "refresh", str(repo)],
+                   env=env, check=True, capture_output=True)
+    assert build(repo)["mode"] == "incremental" and seeds(repo)
+
+
+def test_disabled_builds_are_unchanged_full_builds_without_seeds(repo):
+    policy.configure(repo, incremental=False)
     ensure(repo)
     (repo / "pkg/b.py").write_text("def beta():\n    return 2\n")
     ensure(repo)
@@ -154,7 +172,7 @@ def test_a_failing_incremental_extract_falls_back_to_a_full_one(repo):
 def test_disabling_removes_seeds_on_the_next_build(repo, monkeypatch):
     ensure(repo)
     assert seeds(repo)
-    monkeypatch.delenv("WORKTREE_KNOWLEDGE_INCREMENTAL")
+    policy.configure(repo, incremental=False)
     (repo / "pkg/b.py").write_text("def beta():\n    return 2\n")
     ensure(repo)
     assert seeds(repo) == [] and build(repo) is None

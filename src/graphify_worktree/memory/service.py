@@ -43,7 +43,7 @@ def memory_directory(repo):
 
 
 def general_directory():
-    """Opt-in lessons shared by every repository (WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1)."""
+    """Opt-in lessons shared by repositories with harness.generalMemory set."""
     return _vault() / "General" / "Memory"
 
 
@@ -51,10 +51,10 @@ def _directory(scope, repo):
     return general_directory() if scope == "general" else memory_directory(repo)
 
 
-def _scope_of(identifier, repo):
+def _scope_of(identifier, repo, general):
     """Where an existing note lives: its repository first, then General/Memory when enabled."""
     name = identifier + ".md"
-    if settings.general_memory() and not (memory_directory(repo) / name).exists() \
+    if general and not (memory_directory(repo) / name).exists() \
             and (general_directory() / name).exists():
         return "general"
     return "repository"
@@ -293,11 +293,12 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
     if type(once) is not bool:
         raise MemoryRequestError("once must be boolean")
     root = resolve_root(root)
-    require(root, capability="obsidian", once=once, session_mode=session_mode)
+    general_memory = require(root, capability="obsidian", once=once, session_mode=session_mode)["general_memory"]
     args = validate(action, arguments)
     if action == "save" and args["scope"] == "general":
-        if not settings.general_memory():
-            raise MemoryRequestError("general memory is off; set WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1 to save scope general")
+        if not general_memory:
+            raise MemoryRequestError("general memory is off for this repository; the user can enable it with "
+                                     "graphify-worktree configure --general-memory on PATH")
         if args["status"] != "accepted":
             raise MemoryRequestError("general notes must be saved as accepted, after explicit approval for all repositories")
     try:
@@ -305,13 +306,13 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
         if action == "save":
             scope = args["scope"]
         elif "id" in args:
-            scope = _scope_of(args["id"], repo)
+            scope = _scope_of(args["id"], repo, general_memory)
         else:
             scope = "repository"
         directory = _directory(scope, repo)
         result = {"repo": repo, "warnings": [WARNING]}
         general = []
-        if action == "search" and settings.general_memory():
+        if action == "search" and general_memory:
             with store.directory(general_directory(), create=False, writing=False) as fd:
                 general = _search(fd, args, repo, general_directory(), result["warnings"], "general")
         # Only saving new content may create storage. Failed lifecycle operations

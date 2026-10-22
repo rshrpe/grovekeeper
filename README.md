@@ -63,11 +63,20 @@ The skill is an operational guard on the managed tools, not a filesystem sandbox
 | `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI` | `~/.local/bin/obsidian` | Native Obsidian CLI for `export --open` |
 | `WORKTREE_KNOWLEDGE_SKILL_DIR` | `~/.agents/skills/worktree-knowledge` | Where the installer links the skill |
 | `WORKTREE_KNOWLEDGE_STATE_DIR` | `~/.local/state/grovekeeper` | Per-session counters of the optional pre-tool nudge |
-| `WORKTREE_KNOWLEDGE_GENERAL_MEMORY` | unset | `1` enables general-scope lessons in `General/Memory/`, searched after repository notes |
-| `WORKTREE_KNOWLEDGE_INCREMENTAL` | unset | `1` makes rebuilds incremental (seeded upstream extract; full on any doubt) |
+| `WORKTREE_KNOWLEDGE_GENERAL_MEMORY` | unset | Deprecated: use `configure --general-memory` (below). `1` is still honoured while the repository setting is unset |
+| `WORKTREE_KNOWLEDGE_INCREMENTAL` | unset | Deprecated: use `configure --incremental` (below). `1` is still honoured while the repository setting is unset |
 | `HARNESS_KNOWLEDGE_MODE` | `default` | `off` disables knowledge for the process |
 
 Values must be absolute or start with `~`. Set vault overrides in the environment your harness starts the MCP server with, so the CLI and the server agree.
+
+Two opt-in features are repository settings, saved like the mode in the common Git config so every worktree, harness and process agrees. `graphify-worktree policy` reports their effective values as `incremental` and `general_memory`:
+
+| Setting | Git key | Turns on |
+|---|---|---|
+| `configure --incremental on\|off PATH` | `harness.knowledgeIncremental` | Incremental rebuilds (seeded upstream extract; full on any doubt) |
+| `configure --general-memory on\|off PATH` | `harness.generalMemory` | General-scope lessons in `General/Memory/` for this repository, searched after its own notes |
+
+**Migrating from the variables:** run `graphify-worktree configure --incremental on PATH` (or `--general-memory on`) in each repository that relied on them, then remove the variable. While a repository's key is unset, the variable still counts for one more release, and `policy` lists it under `deprecated_environment`.
 
 ## Usage
 
@@ -76,6 +85,7 @@ The agents follow `skills/worktree-knowledge/SKILL.md`. By hand:
 ```sh
 graphify-worktree policy .                 # read-only consent check
 graphify-worktree configure graph .        # save a mode for the repository
+graphify-worktree configure --incremental on .   # a setting; never changes the mode
 graphify-worktree ensure .                 # build or reuse a fresh graph
 graphify-worktree status .                 # 0 fresh, 3 stale, 4 missing, 5 denied
 graphify-worktree diff ../main .           # structural differences between two worktrees' graphs

@@ -6,7 +6,7 @@ import shutil
 import sys
 import time
 
-from graphify_worktree import artifacts, incremental, settings
+from graphify_worktree import artifacts, incremental, policy
 from graphify_worktree.errors import GraphError
 from graphify_worktree.extract import extract
 from graphify_worktree.freshness import FRESH_REASON, describe, resolve_scope, snapshot
@@ -75,7 +75,7 @@ def refresh(root, output, scratch, requested_scope, *, authorize=None):
 
 def _extract(root, output, scoped, scratch, before, saved):
     """Staged output and its build record (None when incremental rebuilds are off)."""
-    if not settings.incremental():
+    if not policy.settings(root)["incremental"]:
         return extract(root, scoped, scratch, before), None
     seed, reason = incremental.plan(root, output, saved, before)
     if seed is not None:

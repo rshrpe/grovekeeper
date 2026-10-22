@@ -1,4 +1,4 @@
-"""Opt-in incremental rebuilds (WORKTREE_KNOWLEDGE_INCREMENTAL=1).
+"""Opt-in incremental rebuilds (`graphify-worktree configure --incremental on`).
 
 A build keeps upstream's raw extraction output (manifest.json, the AST cache
 and its graph.json before citations are rebased) as a seed in

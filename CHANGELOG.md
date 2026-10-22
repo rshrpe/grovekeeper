@@ -13,6 +13,12 @@ All notable changes to this project are documented here. The format follows [Kee
   - Unchanged: every other manifest mismatch is still refused, and nothing changes until the user runs `hooks install` or `hooks uninstall`.
 - **Session-start recall also runs when a session is resumed or forked.** The `SessionStart` matcher of the opt-in recall hook is now `startup|resume|clear|compact|fork` (was `startup|clear|compact`), so Claude Code `--resume`, `--continue`, `/resume` and forked sessions, and resumed Codex sessions, get the same list as a fresh start. Codex has no `fork` source, so that part never matches there. An existing registration keeps its old matcher until `WORKTREE_KNOWLEDGE_SESSION_RECALL=1 ./install.sh` is run again; a plain `./install.sh` leaves it as it is.
 - **CLI JSON keeps non-ASCII characters.** Every `graphify-worktree` command now prints its JSON through one emitter with `ensure_ascii=False`, as `memory` already did, so a path or title with non-ASCII characters appears as itself instead of `\uXXXX` escapes. `hooks` error and denial results are now indented like every other result. The JSON values are unchanged. As with `memory` output before, a terminal whose locale cannot encode such a character fails to print it.
+- **Incremental rebuilds and general memory are repository settings.** They were environment variables, read per process, so the CLI and the MCP server could silently disagree. A build by a process without `WORKTREE_KNOWLEDGE_INCREMENTAL=1` deleted the seed, and general notes saved from the CLI were invisible through MCP.
+  - **Where they live:** `harness.knowledgeIncremental` and `harness.generalMemory` in the common Git config, read without includes in the same `git config` call as `harness.knowledgeMode`. Every worktree, harness and process of a clone agrees.
+  - **Setting them:** `graphify-worktree configure --incremental on|off` and `--general-memory on|off`. MODE becomes optional when one of these is given (`configure --incremental on PATH`), and setting them never changes the knowledge mode. A directory named like a mode is refused as ambiguous (`./graph` works).
+  - **Reporting:** `policy` (and the `policy` object in denials) always includes `incremental` and `general_memory`. An invalid or conflicting value counts as off and is named in `invalid_settings`.
+  - **General memory is now per repository:** general lessons are saved and searched only in repositories that turned it on. The refusal message names the `configure` command.
+  - **Migration:** while a repository's key is unset, `WORKTREE_KNOWLEDGE_INCREMENTAL=1` / `WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1` still count for one release. `policy` then lists the variable under `deprecated_environment`. Run the `configure` command in each repository that relied on a variable, then remove it.
 
 ### Internal
 - `policy._session` is the one place where an inherited `HARNESS_KNOWLEDGE_MODE=off` beats an in-process session mode; the copies of that rule in the memory service and in `learning` are gone.
@@ -24,7 +30,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 
 ### Added in Phase 3: opt-in general-scope lessons (needs sign-off)
-- **`WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1` enables lessons shared by every repository,** stored in `General/Memory/` of the memory vault. Unset or any other value: general notes are neither saved nor read, and memory behaves exactly as before.
+- **`WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1` enables lessons shared by every repository** (now a per-repository setting, `configure --general-memory`; see above), stored in `General/Memory/` of the memory vault. Unset or any other value: general notes are neither saved nor read, and memory behaves exactly as before.
 - **Saving:** `memory_save` takes `scope` (`repository` by default, or `general`). A general note must be saved as `accepted` (explicit cross-repository approval). Its originating repository, worktree, branch and commit are still recorded, and the frontmatter gains `scope: "general"`. Repository notes and their files are byte-identical to before.
 - **Reading:**
   - Search returns the current repository's notes first, then general lessons, within one `limit`; general results carry `scope: "general"`.
@@ -88,7 +94,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - **MCP tool surface:** `memory_verify` and `memory_lint` are added after `memory_supersede`, and `memory_save` gains only the two optional date properties. Every other tool entry is byte-identical.
 
 ### Added in Phase 3: opt-in incremental rebuilds (needs sign-off)
-- **`WORKTREE_KNOWLEDGE_INCREMENTAL=1` makes rebuilds incremental.** It must be set for the CLI and in the environment the harness starts the MCP server with. Unset or any other value: rebuilds are the same full extractions as before, with no seed and no new provenance field.
+- **`WORKTREE_KNOWLEDGE_INCREMENTAL=1` makes rebuilds incremental** (now a repository setting, `configure --incremental`; see above). It must be set for the CLI and in the environment the harness starts the MCP server with. Unset or any other value: rebuilds are the same full extractions as before, with no seed and no new provenance field.
 - **How it works:**
   - Each build keeps upstream's raw output (`manifest.json`, AST cache, `graph.json` before citations are rebased) as a seed in `graphify-out/.graphify-worktree-seed/<token>/`, named in provenance `build.seed`.
   - The next rebuild moves that seed into the staged workspace and runs `graphify extract --code-only` without `--force`.

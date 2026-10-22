@@ -11,13 +11,16 @@ from graphify_worktree.memory import handle
 
 @pytest.fixture
 def vault(tmp_path, make_repo, monkeypatch):
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_GENERAL_MEMORY", "1")
+    monkeypatch.delenv("WORKTREE_KNOWLEDGE_GENERAL_MEMORY", raising=False)
     return tmp_path / "vault"
 
 
 @pytest.fixture
 def repos(make_repo, vault):
-    return make_repo("alpha", mode="obsidian"), make_repo("beta", mode="obsidian")
+    alpha, beta = make_repo("alpha", mode="obsidian"), make_repo("beta", mode="obsidian")
+    for root in (alpha, beta):
+        policy.configure(root, general_memory=True)
+    return alpha, beta
 
 
 APPROVAL = {"recorded_by": "manual", "confirmed": True, "confirmation": "test approval"}
@@ -54,12 +57,13 @@ def test_repository_notes_are_unchanged(repos):
     assert "scope" not in note and "scope" not in Path(note["path"]).read_text()
 
 
-def test_off_unless_enabled(repos, monkeypatch, vault):
+def test_off_unless_enabled_for_the_repository(repos):
     save(repos[0], "Retries need jitter", "general")
-    monkeypatch.delenv("WORKTREE_KNOWLEDGE_GENERAL_MEMORY")
+    policy.configure(repos[1], general_memory=False)
     with pytest.raises(MemoryRequestError, match="general memory is off"):
-        save(repos[0], "Timeouts need budgets", "general")
+        save(repos[1], "Timeouts need budgets", "general")
     assert search(repos[1]) == []
+    assert [note["scope"] for note in search(repos[0])] == ["general"]
 
 
 # Reading -------------------------------------------------------------------------

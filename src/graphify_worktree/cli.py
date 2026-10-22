@@ -13,7 +13,7 @@ from graphify_worktree.guard import ensure
 from graphify_worktree.memory import handle as handle_memory
 from graphify_worktree.memory import schema as memory_schema
 from graphify_worktree.obsidian_export import export, open_in_obsidian
-from graphify_worktree.policy import configure, get_policy, require
+from graphify_worktree.policy import MODES, configure, get_policy, require
 from graphify_worktree.publish import refresh
 
 STATE_EXIT = {"fresh": 0, "stale": 3, "missing": 4}
@@ -40,9 +40,11 @@ def parser():
     commands = parser.add_subparsers(dest="command", required=True)
     policy_parser = commands.add_parser("policy", help="read repository knowledge preference without inspecting artifacts")
     policy_parser.add_argument("path", nargs="?", default=".")
-    configure_parser = commands.add_parser("configure", help="save shared repository preference; never build, export, open, or delete artifacts")
-    configure_parser.add_argument("mode", choices=("off", "graph", "obsidian"))
+    configure_parser = commands.add_parser("configure", help="save shared repository preference and settings; never build, export, open, or delete artifacts")
+    configure_parser.add_argument("mode", nargs="?", metavar="MODE", help="off, graph or obsidian; optional when a setting is given")
     configure_parser.add_argument("path", nargs="?", default=".")
+    configure_parser.add_argument("--incremental", choices=("on", "off"), help="incremental rebuilds for every worktree of this repository")
+    configure_parser.add_argument("--general-memory", choices=("on", "off"), help="general-scope lessons (General/Memory) in this repository")
     refresh_parser = commands.add_parser("refresh", help="atomically rebuild this worktree's code graph")
     refresh_parser.add_argument("path", nargs="?", default=".", help="directory in the worktree (default: cwd)")
     refresh_parser.add_argument("--scope", metavar="RELATIVE_DIR", help="scan within the worktree; omitted reuses saved scope, initially '.'")
@@ -95,8 +97,26 @@ def run_recall(path):
     return 0
 
 
+def configure_arguments(command_parser, arguments):
+    """(mode, path, settings) for configure; MODE may be left out when a setting is given."""
+    mode, path = arguments.mode, arguments.path
+    settings = {name: value == "on" for name, value in (("incremental", arguments.incremental),
+                                                         ("general_memory", arguments.general_memory))
+                if value is not None}
+    if settings and mode is not None and arguments.path == "." and mode not in MODES:
+        mode, path = None, mode  # `configure --incremental on PATH`
+    elif settings and mode in MODES and arguments.path == "." and Path(mode).is_dir():
+        command_parser.error(f"{mode!r} is both a mode and a directory here; write ./{mode} for the directory")
+    if mode is None and not settings:
+        command_parser.error("configure needs MODE (off, graph or obsidian) or --incremental/--general-memory")
+    if mode is not None and mode not in MODES:
+        command_parser.error(f"invalid mode {mode!r}: choose off, graph or obsidian")
+    return mode, path, settings
+
+
 def main(argv=None):
-    arguments = parser().parse_args(argv)
+    command_parser = parser()
+    arguments = command_parser.parse_args(argv)
     if arguments.command == "memory":
         result = handle_memory(arguments.memory_action, arguments.path,
                                memory_schema.payload_from_cli(arguments), once=arguments.once)
@@ -126,11 +146,12 @@ def main(argv=None):
             if not error.not_repository:
                 raise
             policy = {"state": "not_repository", "saved_mode": None, "effective_mode": "off",
-                      "worktree_root": None, "reason": str(error)}
+                      "worktree_root": None, "reason": str(error), "incremental": False, "general_memory": False}
         emit(policy)
         return 0
     if arguments.command == "configure":
-        emit(configure(arguments.path, arguments.mode))
+        mode, path, settings = configure_arguments(command_parser, arguments)
+        emit(configure(path, mode, **settings))
         return 0
     if arguments.command == "ensure":
         emit(ensure(arguments.path, once=arguments.once))
