@@ -45,6 +45,7 @@ def export_canvas(vault, graph, communities, labels):
                                         "The full graph remains available through Graphify MCP.",
                                 "x": 0, "y": -240, "width": 660, "height": 180})
             temporary = path.with_suffix(".canvas.tmp")
+            artifacts.check_artifacts(path.parent, (temporary.name,))
             try:
                 artifacts.write_json(temporary, {"nodes": nodes, "edges": []})
                 os.replace(temporary, path)
@@ -81,6 +82,8 @@ def export(root, output, scratch, *, wiki=False):
     vault = Path(status["vault_path"])
     if vault.is_symlink() or vault.resolve() != vault:
         raise GraphError("generated vault path must not traverse symlinks")
+    artifacts.check_artifacts(vault, (artifacts.PROVENANCE, ".graphify_obsidian_manifest.json",
+                                     ".obsidian", "_graphify-worktree"))
     if vault.exists() and any(vault.iterdir()):
         try:
             owner = artifacts.load_json(vault / artifacts.PROVENANCE)

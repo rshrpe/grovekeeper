@@ -23,6 +23,19 @@ def test_matching_sources_and_artifacts_are_fresh():
     assert decide() is None
 
 
+@pytest.mark.parametrize("name", [".graphify_analysis.json", ".graphify_labels.json", ".graphify_learning.json"])
+def test_sidecar_symlinks_are_refused_before_upstream_reads(tmp_path, name):
+    from graphify_worktree import artifacts
+
+    output = tmp_path / "graphify-out"
+    output.mkdir()
+    private = tmp_path / "private.json"
+    private.write_text("{}")
+    (output / name).symlink_to(private)
+    with pytest.raises(GraphError, match="symlink"):
+        artifacts.check_artifacts(output)
+
+
 def test_graph_from_another_worktree_is_stale():
     assert decide(root="/work/other") == "graph belongs to a different worktree"
 

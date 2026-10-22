@@ -21,6 +21,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import uuid
 
 from graphify_worktree.errors import GraphError
@@ -60,6 +61,17 @@ def plan(root, output, saved, before):
 
 def seed(source, staged, saved, before):
     """Move the seed into staged and make upstream re-extract every changed file."""
+    # Seeds live in the checkout: a committed or replaced cache must not redirect
+    # upstream reads/writes (including manifest rewrites) outside the workspace.
+    def walk_error(error):
+        raise error
+
+    for directory, names, files in os.walk(source, onerror=walk_error):
+        for name in names + files:
+            path = Path(directory) / name
+            mode = path.lstat().st_mode
+            if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                raise GraphError(f"incremental seed contains a non-regular path: {path}")
     if staged.exists():
         shutil.rmtree(staged)  # only detection caches of this workspace
     os.rename(source, staged)

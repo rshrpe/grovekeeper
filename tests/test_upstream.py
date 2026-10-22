@@ -60,3 +60,18 @@ def test_work_memory_constants_mirror_upstream():
     from graphify_worktree import learning
     assert learning.OUTCOMES == OUTCOMES
     assert upstream.LEARNING_SIDECAR == LEARNING_SIDECAR_NAME
+
+
+@pytest.mark.parametrize("shadow", ["graphify.py", "sitecustomize.py"])
+def test_extraction_does_not_execute_checkout_modules(tmp_path, monkeypatch, shadow):
+    from graphify_worktree.extract import run_graphify
+
+    marker = tmp_path / "executed"
+    (tmp_path / shadow).write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).write_text('executed')\n",
+        encoding="utf-8",
+    )
+    # Empty PYTHONPATH components also name cwd; isolated mode must ignore them.
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    run_graphify(["--version"], tmp_path)
+    assert not marker.exists()

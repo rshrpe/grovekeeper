@@ -59,6 +59,10 @@ def _paths(output):
     for path in (paths["memory"], paths["lessons"].parent, paths["lessons"], paths["learning"]):
         if path.is_symlink():
             raise GraphError(f"{path} must be worktree-local, not a symlink")
+    # Reflection reads every Markdown note, not only the memory directory itself.
+    for path in paths["memory"].glob("*.md"):
+        if path.is_symlink() or not path.is_file():
+            raise GraphError(f"{path} must be a regular worktree-local note, not a symlink")
     return paths
 
 

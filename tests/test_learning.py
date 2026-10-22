@@ -126,6 +126,20 @@ def test_writes_refuse_symlinked_work_memory(repo, tmp_path):
     assert list(elsewhere.iterdir()) == []
 
 
+def test_reflection_refuses_symlinked_individual_notes(tmp_path):
+    from graphify_worktree.errors import GraphError
+
+    output = tmp_path / "graphify-out"
+    memory = output / "memory"
+    memory.mkdir(parents=True)
+    private = tmp_path / "private.md"
+    private.write_text('---\ntype: "query"\noutcome: "dead_end"\nquestion: "private"\n---\n')
+    (memory / "linked.md").symlink_to(private)
+    with pytest.raises(GraphError, match="symlink"):
+        learning._paths(output)
+    assert not (output / "reflections").exists()
+
+
 @pytest.mark.integration
 def test_publish_leaves_work_memory_reflections_and_overlay_untouched(repo):
     policy.configure(repo, "graph")

@@ -9,6 +9,7 @@ requires-python = ">=3.11"
 dependencies = [
     "graphifyy[mcp,sql]==0.9.93",
     "mcp==2.3.0",
+    "certifi>=2026.10.19",
 ]
 classifiers = [
     "Operating System :: MacOS",
@@ -26,6 +27,9 @@ dev = ["pytest>=8"]
 [build-system]
 requires = ["uv_build>=0.9,<0.10"]
 build-backend = "uv_build"
+
+[tool.uv]
+required-version = ">=0.13.4"
 
 [tool.uv.build-backend]
 module-name = "graphify_worktree"

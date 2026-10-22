@@ -42,3 +42,15 @@ def test_more_than_ten_thousand_communities_is_an_error_and_writes_no_pages(tmp_
         export_canvas(vault, LargeGraph(), {}, {})
     assert not list((vault / "_graphify-worktree").glob("communities-*.canvas"))
     assert not (vault / "graph.canvas").exists()
+
+
+def test_page_temporary_symlink_cannot_overwrite_an_outside_file(tmp_path):
+    vault = vault_with(tmp_path, 1)
+    private = tmp_path / "private.json"
+    private.write_text("private")
+    temporary = vault / "_graphify-worktree/communities-0-0001.canvas.tmp"
+    temporary.symlink_to(private)
+    with pytest.raises(GraphError, match="symlink"):
+        export_canvas(vault, LargeGraph(), {}, {})
+    assert private.read_text() == "private"
+    assert temporary.is_symlink()

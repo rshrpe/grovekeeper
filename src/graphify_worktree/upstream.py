@@ -54,8 +54,8 @@ def graphify_version():
 
 
 def graphify_command():
-    """Run the Graphify CLI from this interpreter's environment."""
-    return [sys.executable, "-m", "graphify"]
+    """Run installed Graphify without importing modules from the indexed checkout."""
+    return [sys.executable, "-I", "-m", "graphify"]
 
 
 # Detection -----------------------------------------------------------------

@@ -86,8 +86,8 @@ def read_event(output):
     return event if isinstance(event, dict) else None
 
 
-def check_artifacts(output):
-    for name in ("graph.json", "GRAPH_REPORT.md", PROVENANCE, EVENT):
+def check_artifacts(output, names=(*OWNED, EVENT, upstream.LEARNING_SIDECAR)):
+    for name in names:
         path = output / name
         if path.is_symlink() or path.resolve() != path:
             raise GraphError(f"{path} must be worktree-local, not a symlink")

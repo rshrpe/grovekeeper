@@ -186,3 +186,25 @@ def test_seeds_never_touch_work_memory(repo):
     (repo / "pkg/b.py").write_text("def beta():\n    return 2\n")
     ensure(repo)
     assert (memory / "note.md").read_text() == "kept\n"
+
+
+@pytest.mark.parametrize("target", ["manifest.json", "raw-graph.json", "cache/nested"])
+def test_seed_rejects_symlinks_before_moving_or_writing(tmp_path, target):
+    from graphify_worktree.errors import GraphError
+
+    source = tmp_path / "seed"
+    source.mkdir()
+    for name in ("manifest.json", "raw-graph.json"):
+        (source / name).write_text('{"valuable": "data"}')
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"valuable": "data"}')
+    link = source / target
+    link.parent.mkdir(exist_ok=True)
+    link.unlink(missing_ok=True)
+    link.symlink_to(outside)
+    staged = tmp_path / "staged"
+    with pytest.raises(GraphError, match="non-regular"):
+        incremental.seed(source, staged, {"manifest": {"valuable": "old"}},
+                         {"manifest": {}, "scope": "."})
+    assert outside.read_text() == '{"valuable": "data"}'
+    assert source.is_dir() and not staged.exists()

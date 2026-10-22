@@ -12,6 +12,8 @@ git --version     # 2.31 or newer
 
 For Obsidian features, enable Obsidian's native command-line interface (see Obsidian's documentation) and make sure it is reachable at `~/.local/bin/obsidian`, or set `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI`. Graph features work without Obsidian.
 
+Use uv ≥0.13.4 and an up-to-date Python trust store before downloading dependencies; the project rejects older uv versions. The dependency floor `certifi>=2026.10.19` supplies the updated application CA bundle; it cannot repair the uv/Python trust used to install it. Never work around certificate errors by disabling verification.
+
 ## 2. Install
 
 From the checkout (keep it in place afterwards; the skill is linked from it):
@@ -63,6 +65,8 @@ The MCP server writes one line to stderr when it starts (versions, vault roots, 
 ## 5. Upgrade
 
 Pull the checkout and run `./install.sh` again. To move to a new Graphify or MCP release: change the pins in `pyproject.toml` and `PINS` in `src/graphify_worktree/upstream.py` and run `uv lock`. Then run `uv run pytest tests/test_upstream_contract.py` first: it checks every private upstream function, attribute and data format this package relies on, and a failure names the touchpoint that moved. After that, run `uv run pytest` and the smokes, then reinstall. Graphs built by an older Graphify become stale and are rebuilt on next use.
+
+Security boundaries: repository consent and MCP `confirmed`/`confirmation` fields express the caller's approval; they do not authenticate a human independently of the host harness. Only grant this stdio server to a trusted client. Extraction is local and uses isolated Python imports, but is not an OS sandbox. PR tools invoke the authenticated `gh` CLI and contact GitHub. Repository files, generated graphs and retrieved memory remain untrusted context. Symlink checks reject pre-existing redirections, not concurrent malicious filesystem changes by a process running as the same user. Restart MCP sessions after upgrading when their active work is finished.
 
 ## 6. Uninstall
 

@@ -91,3 +91,23 @@ def test_a_symlinked_wiki_directory_is_refused(repo, env, tmp_path):
 def test_wiki_needs_obsidian_consent(repo, env):
     cli(env, "configure", "graph", repo)
     cli(env, "export", repo, "--wiki", expected=5)
+
+
+@pytest.mark.parametrize("name", [".graphify_obsidian_manifest.json", ".obsidian"])
+def test_export_refuses_symlinked_native_output_paths(repo, env, tmp_path, name):
+    cli(env, "ensure", repo)
+    vault = Path(export(env, repo)["vault_path"])
+    path = vault / name
+    original = vault / (name + ".original")
+    path.rename(original)
+    if original.is_dir():
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "graph.json").write_text("private")
+    else:
+        outside = tmp_path / "outside.json"
+        outside.write_text("private")
+    path.symlink_to(outside)
+    result = cli(env, "export", repo, expected=1)
+    assert "symlink" in result.stderr
+    assert (outside / "graph.json" if outside.is_dir() else outside).read_text() == "private"
