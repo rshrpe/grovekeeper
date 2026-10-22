@@ -106,7 +106,7 @@ Layout:
 
 ```
 src/graphify_worktree/
-  cli.py              graphify-worktree entry point and the one error/exit-code emitter
+  cli.py              graphify-worktree entry point: prints every JSON result, maps errors to exit codes
   mcp_server.py       graphify-worktree-mcp: consent-gated proxy of upstream tools + memory
   policy.py           harness.knowledgeMode, session opt-out, one-off permission
   errors.py           KnowledgeError hierarchy and exit-code table

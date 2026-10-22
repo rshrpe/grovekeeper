@@ -494,16 +494,14 @@ def add_parser(commands):
 
 
 def run(arguments):
+    """(result JSON, exit code) for a hooks command; failures are results too."""
     try:
         response = {"install": install, "status": status, "uninstall": uninstall}[arguments.hooks_action](arguments.path)
-        print(json.dumps(response, indent=2))
-        return 1 if response["state"] in ("conflict", "relocated") else 0
+        return response, 1 if response["state"] in ("conflict", "relocated") else 0
     except PolicyError as error:
-        print(json.dumps({"state": "denied", "reason": str(error)}))
-        return errors.exit_code(error)
+        return {"state": "denied", "reason": str(error)}, errors.exit_code(error)
     except (KnowledgeError, OSError) as error:
-        print(json.dumps({"state": "error", "reason": str(error)}))
-        return errors.exit_code(error)
+        return {"state": "error", "reason": str(error)}, errors.exit_code(error)
 
 
 if __name__ == "__main__":

@@ -164,7 +164,7 @@ def test_hooks_install_repairs_a_moved_repository(tmp_path, home, monkeypatch, c
     moved = (tmp_path / "moved").resolve()
     status = hooks.status(moved)
     assert (status["state"], status["moved_from"]) == ("relocated", str(old / ".git"))
-    assert hooks.run(argparse.Namespace(hooks_action="status", path=moved)) == 1
+    assert hooks.run(argparse.Namespace(hooks_action="status", path=moved))[1] == 1
     result = hooks.install(moved)
     assert (result["changed"], result["moved_from"]) == (True, str(old / ".git"))
     blocked = commit(moved)

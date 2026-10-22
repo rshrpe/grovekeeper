@@ -20,7 +20,8 @@ STATE_EXIT = {"fresh": 0, "stale": 3, "missing": 4}
 
 
 def emit(payload):
-    print(json.dumps(payload, indent=2))
+    """The one way a command prints its JSON result (non-ASCII text stays readable)."""
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 def non_negative(value):
@@ -99,7 +100,7 @@ def main(argv=None):
     if arguments.command == "memory":
         result = handle_memory(arguments.memory_action, arguments.path,
                                memory_schema.payload_from_cli(arguments), once=arguments.once)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        emit(result)
         return 0
     if arguments.command == "diff":
         emit(diff.compare(arguments.a, arguments.b, once=arguments.once, limit=arguments.limit))
@@ -111,7 +112,9 @@ def main(argv=None):
         emit(learning.run(arguments, sys.stdin))
         return 0
     if arguments.command == "hooks":
-        return hooks.run(arguments)
+        result, code = hooks.run(arguments)
+        emit(result)
+        return code
     if arguments.command == "recall":
         return run_recall(arguments.path)
     if arguments.command == "nudge":
