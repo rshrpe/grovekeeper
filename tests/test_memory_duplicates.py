@@ -7,30 +7,16 @@ import sys
 
 import pytest
 
-from graphify_worktree import policy
 from graphify_worktree.errors import MemoryRequestError
 from graphify_worktree.memory import handle, service
 
 from integration import isolated_env
 
+from conftest import git
+
+pytestmark = pytest.mark.repo(mode="obsidian")
+
 APPROVAL = {"recorded_by": "manual", "confirmed": True, "confirmation": "test approval"}
-
-
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
-
-
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_MEMORY_VAULT", str(tmp_path / "vault"))
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    root = tmp_path / "repo"
-    root.mkdir()
-    git(root, "init", "-q", "-b", "main")
-    git(root, "commit", "-q", "--allow-empty", "-m", "base")
-    policy.configure(root, "obsidian")
-    return root.resolve()
 
 
 def save(root, title, status="accepted", **extra):

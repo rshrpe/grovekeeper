@@ -3,39 +3,24 @@ import json
 import os
 from pathlib import Path
 import shutil
-import subprocess
 
 import pytest
 
-from graphify_worktree import artifacts, cli, incremental, policy, settings, upstream
+from graphify_worktree import artifacts, cli, incremental, settings, upstream
 from graphify_worktree.guard import ensure
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.repo(mode="graph", files={
+    "pkg/a.py": "from pkg.b import beta\n\n\ndef alpha():\n    return beta()\n",
+    "pkg/b.py": "def beta():\n    return 1\n",
+    "lib/c.py": "def gamma():\n    return 3\n",
+})]
+
+
+@pytest.fixture(autouse=True)
+def incremental_on(monkeypatch):
+    monkeypatch.setenv("WORKTREE_KNOWLEDGE_INCREMENTAL", "1")
 
 SEEDS = ".graphify-worktree-seed"
-
-
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
-
-
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT", str(tmp_path / "vaults"))
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_INCREMENTAL", "1")
-    root = tmp_path / "repo"
-    (root / "pkg").mkdir(parents=True)
-    (root / "lib").mkdir()
-    (root / "pkg/a.py").write_text("from pkg.b import beta\n\n\ndef alpha():\n    return beta()\n")
-    (root / "pkg/b.py").write_text("def beta():\n    return 1\n")
-    (root / "lib/c.py").write_text("def gamma():\n    return 3\n")
-    git(root, "init", "-q", "-b", "main")
-    git(root, "add", ".")
-    git(root, "commit", "-q", "-m", "base")
-    policy.configure(root, "graph")
-    return root.resolve()
 
 
 def build(repo):

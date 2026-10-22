@@ -8,13 +8,7 @@ import pytest
 
 from graphify_worktree import memory, policy
 
-
-@pytest.fixture
-def repo(tmp_path, home):
-    root = tmp_path / "repo"
-    root.mkdir()
-    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
-    return root.resolve()
+pytestmark = pytest.mark.repo(commit=False)
 
 
 def test_memory_notes_are_written_under_configured_memory_vault(repo, tmp_path, monkeypatch):

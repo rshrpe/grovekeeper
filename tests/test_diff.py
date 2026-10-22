@@ -6,16 +6,12 @@ import sys
 import pytest
 
 from integration import isolated_env
+from conftest import git
 
 pytestmark = pytest.mark.integration
 
 BASE = "def helper():\n    return 1\n\n\ndef caller():\n    return helper()\n"
 FEATURE = "def new_func():\n    return 0\n\n\ndef helper():\n    return 1\n"
-
-
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
 
 
 def cli(env, *args, expected=0):

@@ -1,25 +1,12 @@
 import hashlib
 import os
-import subprocess
 
 import pytest
 
 from graphify_worktree import gitutil
 from graphify_worktree.errors import GitError, PolicyError
 
-
-def git(cwd, *args):
-    return subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                          check=True, capture_output=True, text=True).stdout.strip()
-
-
-@pytest.fixture
-def repo(tmp_path, home):
-    root = tmp_path / "repo"
-    root.mkdir()
-    git(root, "init", "-q", "-b", "main")
-    git(root, "commit", "-q", "--allow-empty", "-m", "base")
-    return root.resolve()
+from conftest import git
 
 
 def test_ambient_git_environment_cannot_redirect_explicit_paths(repo, tmp_path, monkeypatch):

@@ -2,7 +2,6 @@
 from datetime import date, timedelta
 from pathlib import Path
 import re
-import subprocess
 
 import pytest
 
@@ -10,26 +9,17 @@ from graphify_worktree import policy
 from graphify_worktree.errors import MemoryRequestError, PolicyError
 from graphify_worktree.memory import handle, service
 
+from conftest import git
+
 APPROVAL = {"recorded_by": "manual", "confirmed": True, "confirmation": "test approval"}
 TODAY = date(2026, 10, 21)
 
-
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
+pytestmark = pytest.mark.repo(mode="obsidian")
 
 
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_MEMORY_VAULT", str(tmp_path / "vault"))
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
+@pytest.fixture(autouse=True)
+def fixed_today(monkeypatch):
     monkeypatch.setattr(service, "today", lambda: TODAY)
-    root = tmp_path / "repo"
-    root.mkdir()
-    git(root, "init", "-q", "-b", "main")
-    git(root, "commit", "-q", "--allow-empty", "-m", "base")
-    policy.configure(root, "obsidian")
-    return root.resolve()
 
 
 def day(offset):

@@ -7,34 +7,18 @@ import sys
 import pytest
 
 from integration import isolated_env
+from conftest import git
 
-pytestmark = pytest.mark.integration
-
-
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
+pytestmark = [pytest.mark.integration, pytest.mark.repo(files={
+    "src/core.py": "def core_symbol():\n    return 1\n",
+    "tools/tool.py": "def tool_symbol():\n    return 2\n",
+})]
 
 
 @pytest.fixture
-def env(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
+def env(tmp_path, home):
     return isolated_env(home, WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT=str(tmp_path / "vaults/Graphify"),
                         WORKTREE_KNOWLEDGE_MEMORY_VAULT=str(tmp_path / "vaults/Engineering"))
-
-
-@pytest.fixture
-def repo(tmp_path, env):
-    root = tmp_path / "repo"
-    (root / "src").mkdir(parents=True)
-    (root / "tools").mkdir()
-    (root / "src/core.py").write_text("def core_symbol():\n    return 1\n")
-    (root / "tools/tool.py").write_text("def tool_symbol():\n    return 2\n")
-    git(root, "init", "-q", "-b", "main")
-    git(root, "add", ".")
-    git(root, "commit", "-q", "-m", "base")
-    return root.resolve()
 
 
 def cli(env, *args, expected=0, input=None):

@@ -1,19 +1,11 @@
 """Every CLI result goes through one JSON emitter that keeps non-ASCII text readable."""
 import json
-import subprocess
 
 import pytest
 
 from graphify_worktree import cli, policy
 
-
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    root = tmp_path / "Ünïcode répo"
-    root.mkdir()
-    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
-    return root.resolve()
+pytestmark = pytest.mark.repo(name="Ünïcode répo", commit=False)
 
 
 def run(capsys, *argv):

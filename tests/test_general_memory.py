@@ -1,7 +1,6 @@
 """Opt-in general-scope lessons in General/Memory/, shared across repositories."""
 from pathlib import Path
 import shutil
-import subprocess
 
 import pytest
 
@@ -9,33 +8,19 @@ from graphify_worktree import policy, recall
 from graphify_worktree.errors import MemoryRequestError, PolicyError
 from graphify_worktree.memory import handle
 
-APPROVAL = {"recorded_by": "manual", "confirmed": True, "confirmation": "test approval"}
-
-
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
-
-
-def make_repo(path):
-    path.mkdir()
-    git(path, "init", "-q", "-b", "main")
-    git(path, "commit", "-q", "--allow-empty", "-m", "base")
-    policy.configure(path, "obsidian")
-    return path.resolve()
-
 
 @pytest.fixture
-def vault(tmp_path, home, monkeypatch):
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_MEMORY_VAULT", str(tmp_path / "vault"))
+def vault(tmp_path, make_repo, monkeypatch):
     monkeypatch.setenv("WORKTREE_KNOWLEDGE_GENERAL_MEMORY", "1")
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
     return tmp_path / "vault"
 
 
 @pytest.fixture
-def repos(tmp_path, vault):
-    return make_repo(tmp_path / "alpha"), make_repo(tmp_path / "beta")
+def repos(make_repo, vault):
+    return make_repo("alpha", mode="obsidian"), make_repo("beta", mode="obsidian")
+
+
+APPROVAL = {"recorded_by": "manual", "confirmed": True, "confirmation": "test approval"}
 
 
 def save(root, title, scope=None, status="accepted", content="Retries need jitter.", **extra):

@@ -34,4 +34,7 @@ module-name = "graphify_worktree"
 testpaths = ["tests"]
 addopts = "-ra"
 pythonpath = ["tests", "tests/smoke"]
-markers = ["integration: runs real git, Graphify and MCP subprocesses (about a minute)"]
+markers = [
+    "integration: runs real git, Graphify and MCP subprocesses (about a minute)",
+    "repo(name, mode, files, commit): arguments for the conftest repo fixture",
+]

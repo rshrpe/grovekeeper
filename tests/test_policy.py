@@ -1,23 +1,12 @@
 """Consent semantics: saved mode x session x one-off x capability."""
-import subprocess
-
 import pytest
 
 from graphify_worktree import policy
 from graphify_worktree.policy import PolicyError
 
+from conftest import git
 
-def git(root, *args):
-    return subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True).stdout
-
-
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    root = tmp_path / "repo"
-    root.mkdir()
-    git(root, "init", "-q", "-b", "main")
-    return root.resolve()
+pytestmark = pytest.mark.repo(commit=False)
 
 
 def allowed(root, capability, *, once=False, session_mode=None):
@@ -87,8 +76,7 @@ def test_worktree_specific_and_included_settings_never_grant(repo, tmp_path):
 
 
 def test_mode_is_shared_by_linked_worktrees(repo, tmp_path):
-    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@l",
-                    "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+    git(repo, "commit", "-q", "--allow-empty", "-m", "base")
     other = tmp_path / "other"
     git(repo, "worktree", "add", "-q", "-b", "other", str(other))
     policy.configure(other.resolve(), "graph")

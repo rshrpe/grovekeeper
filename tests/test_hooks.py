@@ -12,12 +12,9 @@ import pytest
 from graphify_worktree import hooks, policy
 from graphify_worktree.errors import HookError
 
+from conftest import git
+
 EVENTS = {"post-checkout", "post-merge", "post-rewrite", "post-commit"}
-
-
-def git(root, *args):
-    return subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                          check=True, capture_output=True, text=True).stdout.strip()
 
 
 def hook(directory, name, body="exit 0\n"):
@@ -28,19 +25,14 @@ def hook(directory, name, body="exit 0\n"):
 
 
 @pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    root = tmp_path / "repo"
-    root.mkdir()
-    git(root, "init", "-q", "-b", "main")
-    git(root, "commit", "-q", "--allow-empty", "-m", "base")
-    policy.configure(root, "graph")
+def repo(make_repo):
+    root = make_repo(mode="graph")
     custom = root / ".custom-hooks"
     custom.mkdir()
     hook(custom, "pre-commit")
     hook(custom, "pre-push")
     git(root, "config", "core.hooksPath", ".custom-hooks")
-    return root.resolve()
+    return root
 
 
 def shims(root):
@@ -129,18 +121,15 @@ def test_legacy_installation_is_still_recognised_and_removable(repo):
 
 
 
-def blocking_repo(root, custom):
+def blocking_repo(make_repo, custom):
     """A repository whose own pre-commit hook exits 7, in core.hooksPath or the default directory."""
-    root.mkdir()
-    git(root, "init", "-q", "-b", "main")
-    git(root, "commit", "-q", "--allow-empty", "-m", "base")
-    policy.configure(root, "graph")
+    root = make_repo(mode="graph")
     directory = root / (".hooks" if custom else ".git/hooks")
     directory.mkdir(exist_ok=True)
     hook(directory, "pre-commit", 'echo "original pre-commit" >&2; exit 7\n')
     if custom:
         git(root, "config", "core.hooksPath", ".hooks")
-    return root.resolve()
+    return root
 
 
 def commit(root):
@@ -155,9 +144,8 @@ def local_hooks_path(root):
 
 
 @pytest.mark.parametrize("custom", [True, False], ids=["core-hooks-path", "default-hooks-directory"])
-def test_hooks_install_repairs_a_moved_repository(tmp_path, home, monkeypatch, custom):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    old = blocking_repo(tmp_path / "repo", custom)
+def test_hooks_install_repairs_a_moved_repository(tmp_path, make_repo, custom):
+    old = blocking_repo(make_repo, custom)
     hooks.install(old)
     assert commit(old).returncode == 1
     (tmp_path / "repo").rename(tmp_path / "moved")
@@ -175,10 +163,8 @@ def test_hooks_install_repairs_a_moved_repository(tmp_path, home, monkeypatch, c
 
 
 @pytest.mark.parametrize("custom", [True, False], ids=["core-hooks-path", "default-hooks-directory"])
-def test_hooks_uninstall_works_on_a_moved_repository(tmp_path, home, monkeypatch, custom):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    blocking_repo(tmp_path / "repo", custom)
-    hooks.install(tmp_path / "repo")
+def test_hooks_uninstall_works_on_a_moved_repository(tmp_path, make_repo, custom):
+    hooks.install(blocking_repo(make_repo, custom))
     (tmp_path / "repo").rename(tmp_path / "moved")
     moved = (tmp_path / "moved").resolve()
     assert hooks.uninstall(moved)["changed"] is True
@@ -187,10 +173,8 @@ def test_hooks_uninstall_works_on_a_moved_repository(tmp_path, home, monkeypatch
     assert commit(moved).returncode == 1, "Git runs the original pre-commit again"
 
 
-def test_a_shim_of_a_moved_repository_never_bypasses_the_original_hook(tmp_path, home, monkeypatch):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    blocking_repo(tmp_path / "repo", True)
-    hooks.install(tmp_path / "repo")
+def test_a_shim_of_a_moved_repository_never_bypasses_the_original_hook(tmp_path, make_repo):
+    hooks.install(blocking_repo(make_repo, True))
     (tmp_path / "repo").rename(tmp_path / "moved")
     moved = (tmp_path / "moved").resolve()
     assert hooks.dispatch(str(moved / ".git/graphify-worktree-hooks"), "pre-commit", []) == 1

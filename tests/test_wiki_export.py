@@ -9,33 +9,16 @@ import pytest
 
 from integration import isolated_env
 
-pytestmark = pytest.mark.integration
-
-
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
+pytestmark = [pytest.mark.integration, pytest.mark.repo(mode="obsidian", files={
+    "pkg/core.py": "def helper():\n    return 1\n\n\ndef caller():\n    return helper()\n",
+    "pkg/other.py": "from pkg.core import helper\n\n\ndef user():\n    return helper()\n",
+})]
 
 
 @pytest.fixture
-def env(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
+def env(tmp_path, home):
     return isolated_env(home, WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT=str(tmp_path / "vaults/Graphify"),
                         WORKTREE_KNOWLEDGE_MEMORY_VAULT=str(tmp_path / "vaults/Engineering"))
-
-
-@pytest.fixture
-def repo(tmp_path, env):
-    root = tmp_path / "repo"
-    (root / "pkg").mkdir(parents=True)
-    (root / "pkg/core.py").write_text("def helper():\n    return 1\n\n\ndef caller():\n    return helper()\n")
-    (root / "pkg/other.py").write_text("from pkg.core import helper\n\n\ndef user():\n    return helper()\n")
-    git(root, "init", "-q", "-b", "main")
-    git(root, "add", ".")
-    git(root, "commit", "-q", "-m", "base")
-    cli(env, "configure", "obsidian", root)
-    return root.resolve()
 
 
 def cli(env, *args, expected=0):

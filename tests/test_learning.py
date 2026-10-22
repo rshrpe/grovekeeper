@@ -14,27 +14,11 @@ from graphify_worktree.guard import ensure
 
 from integration import isolated_env
 
+pytestmark = pytest.mark.repo(files={"pkg/core.py": "def helper():\n    return 1\n\n\ndef caller():\n    return helper()\n"})
+
 APPROVED = {"confirmed": True, "confirmation": "user approved recording this outcome"}
 RESULT = {"question": "where is helper defined", "answer": "pkg/core.py", "nodes": ["helper()"],
           "outcome": "useful", **APPROVED}
-
-
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
-
-
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT", str(tmp_path / "vaults"))
-    root = tmp_path / "repo"
-    (root / "pkg").mkdir(parents=True)
-    (root / "pkg/core.py").write_text("def helper():\n    return 1\n\n\ndef caller():\n    return helper()\n")
-    git(root, "init", "-q", "-b", "main")
-    git(root, "add", ".")
-    git(root, "commit", "-q", "-m", "base")
-    return root.resolve()
 
 
 def files(directory):

@@ -1,22 +1,11 @@
-import subprocess
 from pathlib import Path
 
 import pytest
 
-from graphify_worktree import policy
 from graphify_worktree.errors import MemoryRequestError
 from graphify_worktree.memory import handle
 
-
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_MEMORY_VAULT", str(tmp_path / "vault"))
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    root = tmp_path / "repo"
-    root.mkdir()
-    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
-    policy.configure(root, "obsidian")
-    return root.resolve()
+pytestmark = pytest.mark.repo(mode="obsidian", commit=False)
 
 
 def save(root, title, content):

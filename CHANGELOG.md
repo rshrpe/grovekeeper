@@ -18,6 +18,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `policy._session` is the one place where an inherited `HARNESS_KNOWLEDGE_MODE=off` beats an in-process session mode; the copies of that rule in the memory service and in `learning` are gone.
 - `memory.store.scan()` is the one loop over a memory directory's notes (filename order, unreadable notes yielded with their error). Search, the duplicate check, lint and session-start recall use it instead of four copies.
 - `memory.service.handle` keeps consent, validation, scope and the directory lock; each write action is one function (`_save`, `_accept`, `_verify`, `_supersede`) dispatched from `WRITES`, and a test checks that every registered write action has one. The `memory/schema.py` docstring now says what adding an action involves.
+- Tests share one `git()` helper and a `make_repo` factory in `tests/conftest.py`; the `repo` fixture takes its name, mode, files and commit from a `@pytest.mark.repo(...)` marker. Fourteen local `git()` copies and their near-identical `repo` fixtures are gone.
 
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.

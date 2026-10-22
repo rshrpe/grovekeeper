@@ -1,6 +1,5 @@
 """The generated Obsidian Bases dashboard over one repository's memory notes."""
 from pathlib import Path
-import subprocess
 
 import pytest
 
@@ -8,21 +7,9 @@ from graphify_worktree import dashboard, policy
 from graphify_worktree.errors import KnowledgeError, PolicyError
 from graphify_worktree.memory import handle
 
+from conftest import git
 
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
-
-
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_MEMORY_VAULT", str(tmp_path / "vault"))
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    root = tmp_path / "repo"
-    root.mkdir()
-    git(root, "init", "-q", "-b", "main")
-    policy.configure(root, "obsidian")
-    return root.resolve()
+pytestmark = pytest.mark.repo(mode="obsidian", commit=False)
 
 
 def memory_folder(repo):

@@ -3,32 +3,16 @@ import fcntl
 import json
 import os
 from pathlib import Path
-import subprocess
 import time
 
 import pytest
 
 from graphify_worktree import nudge, policy
 
+from conftest import git
 
-def git(root, *args):
-    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@l", *args],
-                   check=True, capture_output=True)
-
-
-@pytest.fixture
-def repo(tmp_path, home, monkeypatch):
-    monkeypatch.delenv("HARNESS_KNOWLEDGE_MODE", raising=False)
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT", str(tmp_path / "vaults"))
-    root = tmp_path / "repo"
-    (root / "pkg").mkdir(parents=True)
-    (root / "pkg/core.py").write_text("def helper():\n    return 1\n")
-    (root / "README.md").write_text("# readme\n")
-    git(root, "init", "-q", "-b", "main")
-    git(root, "add", ".")
-    git(root, "commit", "-q", "-m", "base")
-    policy.configure(root, "graph")
-    return root.resolve()
+pytestmark = pytest.mark.repo(mode="graph", files={"pkg/core.py": "def helper():\n    return 1\n",
+                                                   "README.md": "# readme\n"})
 
 
 def call(root, tool="Grep", tool_input=None, *, session="s1", agent=None, now=None):
