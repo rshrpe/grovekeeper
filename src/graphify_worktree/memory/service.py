@@ -1,7 +1,6 @@
 """Consent-gated, repository-shared memory operations; retrieved text is evidence only."""
 
 from datetime import date, datetime, timezone
-import os
 from pathlib import Path
 import re
 import uuid
@@ -96,14 +95,8 @@ def similar_titles(first, second):
 
 def _duplicates(fd, title, repo, directory, scope):
     found = []
-    for filename in sorted(os.listdir(fd)):
-        if not filename.endswith(".md"):
-            continue
-        try:
-            metadata, _ = store.load(fd, filename[:-3], repo, scope)
-        except MemoryRequestError:
-            continue
-        if metadata["status"] != "superseded" and similar_titles(title, metadata["title"]):
+    for filename, metadata, _, error in store.scan(fd, repo, scope):
+        if error is None and metadata["status"] != "superseded" and similar_titles(title, metadata["title"]):
             applicable, applicability = _applicability(metadata, repo)
             found.append({key: metadata[key] for key in ("id", "title", "status")}
                          | {"applicable": applicable, "applicability": applicability,
@@ -167,13 +160,8 @@ def _search(fd, args, repo, directory, warnings, scope="repository"):
     if not terms:
         raise MemoryRequestError("query must contain a word or number")
     matches = []
-    for filename in sorted(os.listdir(fd)) if fd is not None else ():
-        if not filename.endswith(".md"):
-            continue
-        try:
-            metadata, content = store.load(fd, filename[:-3], repo, scope)
-        except MemoryRequestError as error:
-            # One hand-edited or foreign note must not hide every other note.
+    for filename, metadata, content, error in store.scan(fd, repo, scope):
+        if error is not None:
             warnings.append(f"skipped unreadable note {filename}: {error}")
             continue
         applicable, _ = _applicability(metadata, repo)
@@ -191,13 +179,12 @@ def _search(fd, args, repo, directory, warnings, scope="repository"):
 
 def _lint(fd, root, repo, directory):
     """Read-only findings; never repairs anything."""
-    findings, notes = [], {}
-    filenames = sorted(name for name in os.listdir(fd) if name.endswith(".md")) if fd is not None else []
-    for filename in filenames:
-        try:
-            metadata, _ = store.load(fd, filename[:-3], repo)
+    findings, notes, checked = [], {}, 0
+    for filename, metadata, _, error in store.scan(fd, repo):
+        checked += 1
+        if error is None:
             notes[metadata["id"]] = metadata
-        except MemoryRequestError as error:
+        else:
             findings.append({"issue": "unreadable", "file": filename, "detail": str(error)})
 
     def finding(metadata, issue, detail):
@@ -226,7 +213,7 @@ def _lint(fd, root, repo, directory):
         if metadata["status"] == "proposed" and metadata["branch"] is not None and gitutil.run(
                 root, "show-ref", "--verify", "--quiet", "refs/heads/" + metadata["branch"]).returncode:
             finding(metadata, "branch_gone", f"proposed on branch {metadata['branch']}, which no longer exists")
-    return {"checked": len(filenames), "findings": findings}
+    return {"checked": checked, "findings": findings}
 
 
 def handle(action, root, arguments, *, once=False, session_mode=None):

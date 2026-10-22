@@ -43,3 +43,21 @@ def test_get_of_a_malformed_note_still_fails(repo):
 def test_memory_namespace_uses_the_repository_identity_name(repo, tmp_path):
     note = save(repo, "Namespace", "Where notes live.")
     assert Path(note["path"]).parent.parent.name.startswith("repo-")
+
+
+def test_scan_yields_every_note_in_name_order_with_unreadable_ones_as_errors(repo):
+    from graphify_worktree.memory import service, store
+    good = save(repo, "Retry ceiling", "Use three retries.")
+    broken = save(repo, "Retry backoff", "Back off.")
+    Path(broken["path"]).write_text("hand edited\n")
+    (Path(good["path"]).parent / "notes.txt").write_text("not a note")
+    folder = service.repository(repo)
+    with store.directory(Path(good["path"]).parent, create=False, writing=False) as fd:
+        scanned = list(store.scan(fd, folder))
+    assert [name for name, *_ in scanned] == sorted([good["id"] + ".md", broken["id"] + ".md"])
+    by_name = {name: (metadata, content, error) for name, metadata, content, error in scanned}
+    metadata, content, error = by_name[good["id"] + ".md"]
+    assert (metadata["title"], content, error) == ("Retry ceiling", "Use three retries.", None)
+    metadata, content, error = by_name[broken["id"] + ".md"]
+    assert metadata is None and content is None and "cannot read memory note" in str(error)
+    assert list(store.scan(None, folder)) == []

@@ -7,7 +7,6 @@ delayed by knowledge it was not allowed to load anyway.
 """
 
 import json
-import os
 import time
 
 from graphify_worktree.errors import KnowledgeError
@@ -29,16 +28,10 @@ def _accepted(root, deadline):
     repo = repository(root)
     notes = []
     with store.directory(memory_directory(repo), create=False, writing=False, blocking=False) as fd:
-        for filename in sorted(os.listdir(fd)) if fd is not None else ():
+        for _, metadata, _, error in store.scan(fd, repo):
             if time.monotonic() > deadline:
                 return None, repo
-            if not filename.endswith(".md"):
-                continue
-            try:
-                metadata, _ = store.load(fd, filename[:-3], repo)
-            except KnowledgeError:
-                continue
-            if metadata["status"] == "accepted":
+            if error is None and metadata["status"] == "accepted":
                 notes.append((metadata["audit_at"][-1], metadata["id"], metadata["title"]))
     notes.sort(reverse=True)
     return notes, repo

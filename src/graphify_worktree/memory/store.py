@@ -163,6 +163,24 @@ def load(fd, identifier, repo, scope="repository"):
         raise MemoryRequestError(f"cannot read memory note {filename}: {error}") from error
 
 
+def scan(fd, repo, scope="repository"):
+    """Every note in a memory directory, in filename order: (filename, metadata, content, error).
+
+    An unreadable note yields metadata and content None and its error, so one
+    hand-edited or foreign note never hides the rest; callers decide what to do
+    with it. fd None (an absent directory) yields nothing.
+    """
+    for filename in sorted(os.listdir(fd)) if fd is not None else ():
+        if not filename.endswith(".md"):
+            continue
+        try:
+            metadata, content = load(fd, filename[:-3], repo, scope)
+        except MemoryRequestError as error:
+            yield filename, None, None, error
+            continue
+        yield filename, metadata, content, None
+
+
 def write(fd, metadata, content):
     serialized = "---\n" + "".join(f"{key}: {json.dumps(value, ensure_ascii=False)}\n" for key, value in metadata.items()) + "---\n" + content
     filename = metadata["id"] + ".md"

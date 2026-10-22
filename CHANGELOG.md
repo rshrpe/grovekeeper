@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Internal
 - `policy._session` is the one place where an inherited `HARNESS_KNOWLEDGE_MODE=off` beats an in-process session mode; the copies of that rule in the memory service and in `learning` are gone.
+- `memory.store.scan()` is the one loop over a memory directory's notes (filename order, unreadable notes yielded with their error). Search, the duplicate check, lint and session-start recall use it instead of four copies.
 
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
