@@ -240,7 +240,7 @@ MCP tool errors set `is_error` and return JSON with an `error` code and `reason`
 | `invalid_memory_request` | Memory input, `project_path`, lifecycle or storage validation failed |
 | `memory_operation_failed` | Unexpected memory I/O or runtime failure |
 | `invalid_learning_request` | `learning_*` input or approval fields failed validation (consent and graph failures use the codes above) |
-| `unknown_tool` | The tool name is not offered by this server |
+| `unknown_tool` | The tool name is not offered by this server (including an unlisted `memory_*` or `learning_*` name) |
 
 `graphify-worktree --version` (and `graphify-worktree-mcp --version`) print the package and the installed versus pinned upstream versions, even when they mismatch. The MCP server logs one startup line to stderr. To diagnose a silent hook or an unexplained `graph_unavailable`/`memory_operation_failed`, the user can set `WORKTREE_KNOWLEDGE_DEBUG=1` in the CLI or MCP server environment; the traceback then goes to stderr. Nothing changes without it.
 

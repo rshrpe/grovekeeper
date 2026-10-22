@@ -11,7 +11,7 @@ import threading
 from tempfile import TemporaryDirectory
 
 from graphify_worktree import learning, settings, upstream
-from graphify_worktree.errors import GraphError, KnowledgeError, LearningRequestError, MemoryRequestError, PolicyError, debug
+from graphify_worktree.errors import GraphError, KnowledgeError, LearningRequestError, PolicyError, debug
 from graphify_worktree.guard import guarded_graph
 from graphify_worktree.memory import handle as handle_memory
 from graphify_worktree.memory.schema import ACTIONS as MEMORY_ACTIONS, GRAPH_REQUEST
@@ -170,8 +170,6 @@ def build_server():
     def call_memory(action, arguments, cancelled):
         # Memory has its own Obsidian gate and never ensures a graph.
         try:
-            if action not in MEMORY_ACTIONS:
-                raise MemoryRequestError(f"unknown memory action: {action}")
             root, once = request_root(arguments)
             arguments.pop("project_path")
             return result(handle_memory(action, root, arguments, once=once, session_mode=session_off()))
@@ -233,7 +231,8 @@ def build_server():
                 "effective_session_mode": effective,
                 "reason": "session knowledge disabled" if effective == "off" else "saved repository policy applies",
             })
-        if params.name.startswith("memory_"):
+        # A family prefix with an action it does not offer falls through to unknown_tool.
+        if params.name.removeprefix("memory_") in MEMORY_ACTIONS and params.name.startswith("memory_"):
             work = lambda cancelled: call_memory(params.name.removeprefix("memory_"), arguments, cancelled)
         elif params.name.removeprefix("learning_") in learning.ACTIONS and params.name.startswith("learning_"):
             work = lambda cancelled: call_learning(params.name.removeprefix("learning_"), arguments, cancelled)
