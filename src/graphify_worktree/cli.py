@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from graphify_worktree import artifacts, dashboard, diff, errors, upstream
+from graphify_worktree import artifacts, dashboard, diff, doctor, errors, upstream
 from graphify_worktree import hooks, learning, nudge, recall
 from graphify_worktree.errors import PolicyError
 from graphify_worktree.freshness import inspect
@@ -83,6 +83,8 @@ def parser():
     hooks.add_parser(commands)
     recall_parser = commands.add_parser("recall", help="session-start hook: print accepted memory titles in obsidian mode; otherwise silent; always exits 0")
     recall_parser.add_argument("path", nargs="?", default=".")
+    doctor_parser = commands.add_parser("doctor", help="read-only report of versions, locations, harness registrations, hooks and this repository's settings; changes nothing, exits 0")
+    doctor_parser.add_argument("path", nargs="?", default=".")
     commands.add_parser("nudge", help="pre-tool hook: read the harness payload on stdin and maybe suggest graph tools (graph consent only); always exits 0")
     return parser
 
@@ -149,6 +151,9 @@ def main(argv=None):
         result, code = hooks.run(arguments)
         emit(result)
         return code
+    if arguments.command == "doctor":
+        emit(doctor.report(arguments.path))
+        return 0
     if arguments.command == "recall":
         return run_recall(arguments.path)
     if arguments.command == "nudge":
@@ -209,8 +214,8 @@ def entrypoint():
     try:
         # Hook commands run on every session start or tool call and must never
         # fail it, so they skip the pin check and fall silent on their own errors.
-        # --version reports a mismatch rather than refusing to.
-        if sys.argv[1:2] not in (["recall"], ["nudge"], ["--version"]):
+        # doctor and --version report a mismatch rather than refusing to.
+        if sys.argv[1:2] not in (["recall"], ["nudge"], ["doctor"], ["--version"]):
             upstream.assert_versions()
         code = main()
     except KeyboardInterrupt:

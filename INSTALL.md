@@ -51,6 +51,7 @@ Restart running Claude Code, Codex and OMP sessions afterwards so they start the
 ```sh
 graphify-worktree --version          # grovekeeper and installed vs pinned Graphify/MCP versions
 graphify-worktree policy .            # prints JSON; exit 0
+graphify-worktree doctor .            # read-only report; "findings": [] when everything is wired up
 PY="$(uv tool dir)/grovekeeper/bin/python"
 "$PY" tests/smoke/smoke.py
 "$PY" tests/smoke/memory_smoke.py

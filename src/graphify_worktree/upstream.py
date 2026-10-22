@@ -33,13 +33,18 @@ def assert_versions():
             )
 
 
+def installed_version(package):
+    """The installed version of package, or None."""
+    try:
+        return version(package)
+    except PackageNotFoundError:
+        return None
+
+
 def version_line(program):
     """The --version text: this package and the installed versus pinned upstream versions."""
     def found(package):
-        try:
-            return version(package)
-        except PackageNotFoundError:
-            return "not installed"
+        return installed_version(package) or "not installed"
     pins = ", ".join(f"{package} {found(package)} (pinned {expected})" for package, expected in PINS.items())
     return f"{program} (grovekeeper {found('grovekeeper')}; {pins})"
 

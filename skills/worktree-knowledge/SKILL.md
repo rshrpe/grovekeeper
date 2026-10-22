@@ -221,7 +221,7 @@ CLI exit codes (JSON results go to stdout, operation errors to stderr):
 
 | Code | Meaning |
 |---|---|
-| 0 | Success; `status` fresh; `policy` for any valid state including `unconfigured` and `not_repository`; `recall` and `nudge` always, even on errors or upstream version mismatch |
+| 0 | Success; `status` fresh; `policy` for any valid state including `unconfigured` and `not_repository`; `recall`, `nudge`, `doctor` and `--version` always, even on errors or upstream version mismatch |
 | 1 | Operation error (invalid memory or learning input, memory storage/lifecycle, failed build, `export --open` registration failure, upstream version mismatch); `hooks` conflict, relocated repository or error (JSON on stdout) |
 | 2 | Usage error |
 | 3 | `status`/`export`: graph stale |
@@ -242,6 +242,6 @@ MCP tool errors set `is_error` and return JSON with an `error` code and `reason`
 | `invalid_learning_request` | `learning_*` input or approval fields failed validation (consent and graph failures use the codes above) |
 | `unknown_tool` | The tool name is not offered by this server (including an unlisted `memory_*` or `learning_*` name) |
 
-`graphify-worktree --version` (and `graphify-worktree-mcp --version`) print the package and the installed versus pinned upstream versions, even when they mismatch. The MCP server logs one startup line to stderr. To diagnose a silent hook or an unexplained `graph_unavailable`/`memory_operation_failed`, the user can set `WORKTREE_KNOWLEDGE_DEBUG=1` in the CLI or MCP server environment; the traceback then goes to stderr. Nothing changes without it.
+`graphify-worktree doctor [PATH]` is a read-only health report that changes nothing and always exits 0. It covers installed versus pinned versions, the vault roots (whether they exist and whether they pass through a symlink), the Obsidian CLI, the MCP registration in each present harness (and whether it points at this installation), the recall and nudge hook entries, the session switches, and the repository's policy, settings and `hooks status`. Problems are listed under `findings`. Run it when a tool or hook behaves unexpectedly and report the findings to the user; repairs such as reinstalling or `hooks install` go through the user. `graphify-worktree --version` (and `graphify-worktree-mcp --version`) print the package and the installed versus pinned upstream versions, even when they mismatch. The MCP server logs one startup line to stderr. To diagnose a silent hook or an unexplained `graph_unavailable`/`memory_operation_failed`, the user can set `WORKTREE_KNOWLEDGE_DEBUG=1` in the CLI or MCP server environment; the traceback then goes to stderr. Nothing changes without it.
 
 Installation verification also exercises real OMP, Claude Code, and Codex sessions and the Obsidian native UI; the disposable smokes alone do not establish harness authentication or desktop availability. The managed server and the smoke client target the MCP 2 Python SDK (`Tool.input_schema`, `CallToolResult.is_error`); MCP 1.x field names are not supported.

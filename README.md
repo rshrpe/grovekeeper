@@ -97,6 +97,7 @@ graphify-worktree recall .                 # what the optional session-start hoo
 graphify-worktree dashboard .              # obsidian mode: Obsidian Bases view of this repository's memory notes
 graphify-worktree learning save-result . --input-file result.json   # upstream work memory, needs approval
 graphify-worktree --version               # grovekeeper and installed vs pinned upstream versions
+graphify-worktree doctor .                # read-only health report: versions, vaults, harness registrations, hooks, settings
 graphify-worktree --help
 ```
 
@@ -133,6 +134,7 @@ src/graphify_worktree/
   incremental.py      opt-in incremental rebuilds: seed, plan, full on any doubt
   guard.py            guarded_graph/ensure: fresh graph in, result withheld if anything moved
   diff.py             compare two worktrees' fresh graphs by node id
+  doctor.py           read-only installation report (`graphify-worktree doctor`)
   obsidian_export.py  generated vault export and `export --open`
   recall.py           session-start hook: accepted memory titles, silent unless obsidian mode
   dashboard.py        generated Obsidian Bases view (Memory.base) of one repository's memory
