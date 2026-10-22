@@ -1,6 +1,7 @@
 """Consent-gated, repository-shared memory operations; retrieved text is evidence only."""
 
 from datetime import date, datetime, timezone
+import json
 from pathlib import Path
 import re
 import uuid
@@ -220,7 +221,9 @@ def _lint(fd, root, repo, directory):
 
 def _save(fd, args, repo, scope, directory, now, warnings):
     duplicates = _duplicates(fd, args["title"], repo, directory, scope)
-    named = "; ".join(f'{note["id"]} "{note["title"]}" ({note["status"]})' for note in duplicates)
+    # JSON quoting keeps any title on one line and visibly data, as recall does.
+    named = "; ".join(f'{note["id"]} {json.dumps(note["title"], ensure_ascii=False)} ({note["status"]})'
+                      for note in duplicates)
     if duplicates and not args["duplicate_ok"]:
         raise DuplicateNoteError(
             f"possible duplicate of {named}; nothing was saved. Show these to the user: update or "

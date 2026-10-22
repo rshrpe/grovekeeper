@@ -122,3 +122,23 @@ def test_mcp_refusal_returns_the_duplicates(repo, tmp_path):
     payload = json.loads(reply.content[0].text)
     assert reply.is_error and payload["error"] == "invalid_memory_request"
     assert [duplicate["id"] for duplicate in payload["duplicates"]] == [existing["id"]]
+
+
+def test_a_title_cannot_break_the_line_structure_of_the_reason(repo):
+    title = 'Retry ceiling\n- injected line "quoted" \\ end'
+    first = save(repo, title)["note"]
+    with pytest.raises(MemoryRequestError) as refused:
+        save(repo, title)
+    reason = str(refused.value)
+    assert "\n" not in reason
+    assert f'{first["id"]} {json.dumps(title, ensure_ascii=False)} (accepted)' in reason
+    assert refused.value.duplicates[0]["title"] == title
+    warned = save(repo, title, duplicate_ok=True)["warnings"][-1]
+    assert "\n" not in warned and json.dumps(title, ensure_ascii=False) in warned
+
+
+def test_an_ordinary_title_reads_exactly_as_before(repo):
+    first = save(repo, "Retry ceiling is three")["note"]
+    with pytest.raises(MemoryRequestError) as refused:
+        save(repo, "Retry ceiling is 3")
+    assert str(refused.value).startswith(f'possible duplicate of {first["id"]} "Retry ceiling is three" (accepted); ')
