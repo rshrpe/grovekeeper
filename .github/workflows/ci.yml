@@ -25,3 +25,21 @@ jobs:
         run: uv run --frozen pytest -m "not integration"
       - name: Integration tests (real git, Graphify and MCP under a disposable HOME)
         run: uv run --frozen pytest -m integration
+
+  install:
+    name: install.sh / uninstall.sh end to end (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      # The script runs both scripts under a disposable HOME, UV_TOOL_DIR and
+      # UV_TOOL_BIN_DIR with fake ~/.claude, ~/.codex and ~/.omp/agent; the
+      # runner's own HOME is never written.
+      - name: Install, reinstall and uninstall under a disposable HOME
+        run: tests/e2e/install_uninstall.sh

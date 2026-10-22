@@ -110,6 +110,7 @@ PY="$(uv tool dir)/grovekeeper/bin/python"
 "$PY" tests/smoke/smoke.py            # graph/policy integration smoke
 "$PY" tests/smoke/memory_smoke.py     # memory integration smoke
 "$PY" tests/smoke/lifecycle_smoke.py  # MCP lifecycle and Git hooks smoke
+tests/e2e/install_uninstall.sh        # install.sh/uninstall.sh under a disposable HOME (as CI)
 ```
 
 The smokes use the executables next to the Python running them (override with `GRAPHIFY_WORKTREE_BIN`). They create disposable repositories and write vaults only to a disposable directory.
