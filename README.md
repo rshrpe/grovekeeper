@@ -66,6 +66,7 @@ The skill is an operational guard on the managed tools, not a filesystem sandbox
 | `WORKTREE_KNOWLEDGE_GENERAL_MEMORY` | unset | Deprecated: use `configure --general-memory` (below). `1` is still honoured while the repository setting is unset |
 | `WORKTREE_KNOWLEDGE_INCREMENTAL` | unset | Deprecated: use `configure --incremental` (below). `1` is still honoured while the repository setting is unset |
 | `HARNESS_KNOWLEDGE_MODE` | `default` | `off` disables knowledge for the process |
+| `WORKTREE_KNOWLEDGE_DEBUG` | unset | `1` prints to stderr the traceback behind a silent `recall`/`nudge` and behind MCP `graph_unavailable`/`memory_operation_failed` results |
 
 Values must be absolute or start with `~`. Set vault overrides in the environment your harness starts the MCP server with, so the CLI and the server agree.
 
@@ -95,6 +96,7 @@ graphify-worktree memory search . --query "retry policy"
 graphify-worktree recall .                 # what the optional session-start hook injects (obsidian mode only)
 graphify-worktree dashboard .              # obsidian mode: Obsidian Bases view of this repository's memory notes
 graphify-worktree learning save-result . --input-file result.json   # upstream work memory, needs approval
+graphify-worktree --version               # grovekeeper and installed vs pinned upstream versions
 graphify-worktree --help
 ```
 

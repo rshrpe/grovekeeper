@@ -19,6 +19,11 @@ All notable changes to this project are documented here. The format follows [Kee
   - **Reporting:** `policy` (and the `policy` object in denials) always includes `incremental` and `general_memory`. An invalid or conflicting value counts as off and is named in `invalid_settings`.
   - **General memory is now per repository:** general lessons are saved and searched only in repositories that turned it on. The refusal message names the `configure` command.
   - **Migration:** while a repository's key is unset, `WORKTREE_KNOWLEDGE_INCREMENTAL=1` / `WORKTREE_KNOWLEDGE_GENERAL_MEMORY=1` still count for one release. `policy` then lists the variable under `deprecated_environment`. Run the `configure` command in each repository that relied on a variable, then remove it.
+- **Diagnostics (additions; nothing changes without `WORKTREE_KNOWLEDGE_DEBUG`):**
+  - `WORKTREE_KNOWLEDGE_DEBUG=1` prints to stderr the traceback that `recall` and `nudge` swallow (they stay silent on stdout and exit 0), and the cause behind MCP `graph_unavailable` and `memory_operation_failed` results.
+  - `graphify-worktree --version` and `graphify-worktree-mcp --version` print the package version and the installed versus pinned Graphify and MCP versions, and exit 0 even when they mismatch.
+  - The MCP server writes one line to stderr at start: versions, vault roots, `HARNESS_KNOWLEDGE_MODE`, any deprecated setting variables in use, and whether debug is on.
+  - An upstream MCP query that has not finished after 600 s returns `graph_unavailable` and releases the server's call lock. Before, a hung upstream handler kept that lock, and every later call waited forever. If the handler is still blocking upstream's event loop, later graph calls now time out the same way instead of hanging.
 
 ### Internal
 - `policy._session` is the one place where an inherited `HARNESS_KNOWLEDGE_MODE=off` beats an in-process session mode; the copies of that rule in the memory service and in `learning` are gone.

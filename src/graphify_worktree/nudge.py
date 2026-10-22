@@ -20,6 +20,7 @@ from pathlib import Path
 import time
 
 from graphify_worktree import artifacts, gitutil, settings, upstream
+from graphify_worktree.errors import debug
 from graphify_worktree.policy import get_policy, resolve_root
 
 
@@ -169,4 +170,5 @@ def respond(payload, *, now=None):
     try:
         return _respond(payload, time.time() if now is None else now)
     except Exception:
+        debug("nudge stayed silent")
         return ""

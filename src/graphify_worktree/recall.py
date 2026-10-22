@@ -9,7 +9,7 @@ delayed by knowledge it was not allowed to load anyway.
 import json
 import time
 
-from graphify_worktree.errors import KnowledgeError
+from graphify_worktree.errors import KnowledgeError, debug
 from graphify_worktree.memory import store
 from graphify_worktree.memory.service import memory_directory, repository
 from graphify_worktree.policy import get_policy, resolve_root
@@ -67,6 +67,7 @@ def session_context(path, *, deadline=None):
             return ""
         notes, repo = _accepted(root, deadline)
     except (KnowledgeError, OSError, UnicodeError):
+        debug("recall stayed silent")
         return ""
     if not notes:
         return ""

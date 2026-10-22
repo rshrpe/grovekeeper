@@ -49,6 +49,7 @@ Restart running Claude Code, Codex and OMP sessions afterwards so they start the
 ## 4. Verify
 
 ```sh
+graphify-worktree --version          # grovekeeper and installed vs pinned Graphify/MCP versions
 graphify-worktree policy .            # prints JSON; exit 0
 PY="$(uv tool dir)/grovekeeper/bin/python"
 "$PY" tests/smoke/smoke.py
@@ -56,7 +57,7 @@ PY="$(uv tool dir)/grovekeeper/bin/python"
 "$PY" tests/smoke/lifecycle_smoke.py
 ```
 
-Each smoke prints `PASS:` lines and exits 0. They use disposable repositories and a disposable vault directory, and need no network or LLM. Then open a session in each harness and confirm the `graphify` MCP server lists `knowledge_session`, the seven `memory_*` tools, the two `learning_*` tools and the ten upstream graph/PR tools.
+The MCP server writes one line to stderr when it starts (versions, vault roots, session mode), which harness MCP logs show. If a hook stays silent or a tool returns `graph_unavailable` or `memory_operation_failed` without an obvious reason, set `WORKTREE_KNOWLEDGE_DEBUG=1` in that environment to get the traceback on stderr. Each smoke prints `PASS:` lines and exits 0. They use disposable repositories and a disposable vault directory, and need no network or LLM. Then open a session in each harness and confirm the `graphify` MCP server lists `knowledge_session`, the seven `memory_*` tools, the two `learning_*` tools and the ten upstream graph/PR tools.
 
 ## 5. Upgrade
 

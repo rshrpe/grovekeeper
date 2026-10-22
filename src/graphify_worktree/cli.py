@@ -31,12 +31,24 @@ def non_negative(value):
     return number
 
 
+class Version(argparse.Action):
+    """--version, computed only when asked so hook commands never pay for it."""
+
+    def __init__(self, option_strings, dest, **kwargs):
+        super().__init__(option_strings, dest, nargs=0, help="print grovekeeper and upstream versions and exit")
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(upstream.version_line(parser.prog))
+        parser.exit()
+
+
 def parser():
     parser = argparse.ArgumentParser(
         prog="graphify-worktree",
         description="Local code-only Graphify graphs and isolated generated Obsidian vaults per Git worktree.",
         epilog="Exit codes: 0 success/fresh, 1 operation error, 2 usage error, 3 stale, 4 missing, 5 policy denied, 130 interrupted; recall and nudge always 0. No LLM, daemon or global graph merge.",
     )
+    parser.add_argument("--version", action=Version)
     commands = parser.add_subparsers(dest="command", required=True)
     policy_parser = commands.add_parser("policy", help="read repository knowledge preference without inspecting artifacts")
     policy_parser.add_argument("path", nargs="?", default=".")
@@ -80,6 +92,7 @@ def run_nudge(stdin):
     try:
         text = nudge.respond(json.load(stdin))
     except Exception:
+        errors.debug("nudge stayed silent")
         return 0
     if text:
         print(text)
@@ -91,6 +104,7 @@ def run_recall(path):
     try:
         text = recall.session_context(path)
     except Exception:
+        errors.debug("recall stayed silent")
         return 0
     if text:
         print(text)
@@ -195,7 +209,8 @@ def entrypoint():
     try:
         # Hook commands run on every session start or tool call and must never
         # fail it, so they skip the pin check and fall silent on their own errors.
-        if sys.argv[1:2] not in (["recall"], ["nudge"]):
+        # --version reports a mismatch rather than refusing to.
+        if sys.argv[1:2] not in (["recall"], ["nudge"], ["--version"]):
             upstream.assert_versions()
         code = main()
     except KeyboardInterrupt:

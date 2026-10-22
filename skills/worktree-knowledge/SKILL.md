@@ -236,10 +236,12 @@ MCP tool errors set `is_error` and return JSON with an `error` code and `reason`
 | Code | Meaning |
 |---|---|
 | `knowledge_policy_denied` | Consent denied, session off, participation changed during a query, a graph tool's `project_path`/`allow_once` is invalid, or `knowledge_session` arguments are malformed; includes `policy` when known |
-| `graph_unavailable` | Build/freshness failure, or sources/provenance changed during the query; result withheld |
+| `graph_unavailable` | Build/freshness failure, sources/provenance changed during the query, or an upstream query that did not finish within 600 s; result withheld |
 | `invalid_memory_request` | Memory input, `project_path`, lifecycle or storage validation failed |
 | `memory_operation_failed` | Unexpected memory I/O or runtime failure |
 | `invalid_learning_request` | `learning_*` input or approval fields failed validation (consent and graph failures use the codes above) |
 | `unknown_tool` | The tool name is not offered by this server |
+
+`graphify-worktree --version` (and `graphify-worktree-mcp --version`) print the package and the installed versus pinned upstream versions, even when they mismatch. The MCP server logs one startup line to stderr. To diagnose a silent hook or an unexplained `graph_unavailable`/`memory_operation_failed`, the user can set `WORKTREE_KNOWLEDGE_DEBUG=1` in the CLI or MCP server environment; the traceback then goes to stderr. Nothing changes without it.
 
 Installation verification also exercises real OMP, Claude Code, and Codex sessions and the Obsidian native UI; the disposable smokes alone do not establish harness authentication or desktop availability. The managed server and the smoke client target the MCP 2 Python SDK (`Tool.input_schema`, `CallToolResult.is_error`); MCP 1.x field names are not supported.
