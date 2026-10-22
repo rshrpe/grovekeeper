@@ -13,7 +13,11 @@ MODES = ("off", "graph", "obsidian")
 
 
 def _session(session_mode):
-    return os.environ.get("HARNESS_KNOWLEDGE_MODE", "default") if session_mode is None else session_mode
+    """The session mode; an inherited HARNESS_KNOWLEDGE_MODE=off beats any in-process value."""
+    environment = os.environ.get("HARNESS_KNOWLEDGE_MODE", "default")
+    if environment == "off" or session_mode is None:
+        return environment
+    return session_mode
 
 
 def _config(root):

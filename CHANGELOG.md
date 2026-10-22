@@ -13,6 +13,9 @@ All notable changes to this project are documented here. The format follows [Kee
   - Unchanged: every other manifest mismatch is still refused, and nothing changes until the user runs `hooks install` or `hooks uninstall`.
 - **Session-start recall also runs when a session is resumed or forked.** The `SessionStart` matcher of the opt-in recall hook is now `startup|resume|clear|compact|fork` (was `startup|clear|compact`), so Claude Code `--resume`, `--continue`, `/resume` and forked sessions, and resumed Codex sessions, get the same list as a fresh start. Codex has no `fork` source, so that part never matches there. An existing registration keeps its old matcher until `WORKTREE_KNOWLEDGE_SESSION_RECALL=1 ./install.sh` is run again; a plain `./install.sh` leaves it as it is.
 
+### Internal
+- `policy._session` is the one place where an inherited `HARNESS_KNOWLEDGE_MODE=off` beats an in-process session mode; the copies of that rule in the memory service and in `learning` are gone.
+
 ### Fixed
 - **`install.sh` could install stale code.** uv reuses its cached wheel of a local project until `pyproject.toml` changes, so re-running the installer after a source-only change kept the previous code. It now passes `--reinstall-package grovekeeper`, which rebuilds the package on every install. Dependencies are still taken from the lock file and are not re-resolved.
 

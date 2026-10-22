@@ -234,9 +234,7 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
     if type(once) is not bool:
         raise MemoryRequestError("once must be boolean")
     root = resolve_root(root)
-    # An in-process default must never undo an inherited session opt-out.
-    effective_session = "off" if os.environ.get("HARNESS_KNOWLEDGE_MODE") == "off" else session_mode
-    require(root, capability="obsidian", once=once, session_mode=effective_session)
+    require(root, capability="obsidian", once=once, session_mode=session_mode)
     args = validate(action, arguments)
     if action == "save" and args["scope"] == "general":
         if not settings.general_memory():

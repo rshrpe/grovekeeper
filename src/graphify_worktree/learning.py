@@ -88,9 +88,6 @@ def handle(action, root, arguments, *, once=False, session_mode=None, cancelled=
     root = resolve_root(root)
 
     def session():
-        # An in-process default must never undo an inherited session opt-out.
-        if os.environ.get("HARNESS_KNOWLEDGE_MODE") == "off":
-            return "off"
         return session_mode() if callable(session_mode) else session_mode
 
     require(root, capability="graph", once=once, session_mode=session())

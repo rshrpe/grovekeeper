@@ -107,3 +107,10 @@ def test_unknown_capability_is_denied(repo):
     policy.configure(repo, "obsidian")
     with pytest.raises(PolicyError):
         policy.require(repo, capability="filesystem")
+
+
+def test_inherited_session_off_beats_an_in_process_default(repo, monkeypatch):
+    policy.configure(repo, "obsidian")
+    monkeypatch.setenv("HARNESS_KNOWLEDGE_MODE", "off")
+    assert policy.get_policy(repo, session_mode="default")["effective_mode"] == "off"
+    assert not allowed(repo, "graph", once=True, session_mode="default")
