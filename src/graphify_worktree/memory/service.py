@@ -216,6 +216,78 @@ def _lint(fd, root, repo, directory):
     return {"checked": checked, "findings": findings}
 
 
+# Write actions: each takes the open memory directory and returns the note it wrote or kept.
+
+def _save(fd, args, repo, scope, directory, now, warnings):
+    duplicates = _duplicates(fd, args["title"], repo, directory, scope)
+    named = "; ".join(f'{note["id"]} "{note["title"]}" ({note["status"]})' for note in duplicates)
+    if duplicates and not args["duplicate_ok"]:
+        raise DuplicateNoteError(
+            f"possible duplicate of {named}; nothing was saved. Show these to the user: update or "
+            "supersede one of them, or resend with duplicate_ok: true only if they still want a "
+            "separate note", duplicates)
+    if duplicates:
+        warnings.append(f"saved despite possible duplicates: {named}")
+    metadata = {"schema_version": 1, "id": str(uuid.uuid4()), "kind": args["kind"],
+                "title": args["title"], "status": args["status"], "date": now[:10],
+                "created_at": now, "repository": repo["id"], "common_git_dir": repo["common_git_dir"],
+                **{key: repo[key] for key in ("worktree", "branch", "commit")},
+                "source": args["source"], "recorded_by": args["recorded_by"],
+                "pr": args.get("pr"), "confirmation": args["confirmation"], "superseded_by": None,
+                **_review_dates(args), **({"scope": "general"} if scope == "general" else {})}
+    content = args["content"]
+    store.append_event(metadata, "save", args, repo, now)
+    store.write(fd, metadata, content)
+    return metadata, content
+
+
+def _accept(fd, args, repo, scope, directory, now, warnings):
+    metadata, content = store.load(fd, args["id"], repo, scope)
+    if metadata["status"] == "superseded":
+        raise MemoryRequestError("superseded notes cannot be accepted; save a new note")
+    if metadata["status"] != "accepted":
+        metadata["status"] = "accepted"
+        store.append_event(metadata, "accept", args, repo, now)
+        store.write(fd, metadata, content)
+    return metadata, content
+
+
+def _verify(fd, args, repo, scope, directory, now, warnings):
+    metadata, content = store.load(fd, args["id"], repo, scope)
+    if metadata["status"] == "superseded":
+        raise MemoryRequestError("superseded notes cannot be verified; save and accept a replacement")
+    dates = _review_dates(args)
+    for key in store.REVIEW:
+        metadata.pop(key, None)
+    metadata.update(dates)
+    store.append_event(metadata, "verify", args, repo, now)
+    store.write(fd, metadata, content)
+    return metadata, content
+
+
+def _supersede(fd, args, repo, scope, directory, now, warnings):
+    metadata, content = store.load(fd, args["id"], repo, scope)
+    if args["replacement_id"] == args["id"]:
+        raise MemoryRequestError("a note cannot supersede itself")
+    try:
+        replacement, _ = store.load(fd, args["replacement_id"], repo, scope)
+    except MemoryRequestError as error:
+        raise MemoryRequestError(f"replacement must be an accepted note in the same scope ({scope}): {error}") from error
+    if replacement["status"] != "accepted":
+        raise MemoryRequestError("replacement must be an accepted note in the same repository")
+    if metadata["status"] == "superseded":
+        if metadata["superseded_by"] != args["replacement_id"]:
+            raise MemoryRequestError("note is already superseded by a different replacement")
+    else:
+        metadata.update(status="superseded", superseded_by=args["replacement_id"])
+        store.append_event(metadata, "supersede", args, repo, now)
+        store.write(fd, metadata, content)
+    return metadata, content
+
+
+WRITES = {"save": _save, "accept": _accept, "verify": _verify, "supersede": _supersede}
+
+
 def handle(action, root, arguments, *, once=False, session_mode=None):
     """Execute one memory operation after consent and request validation."""
     if type(once) is not bool:
@@ -242,10 +314,9 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
         if action == "search" and settings.general_memory():
             with store.directory(general_directory(), create=False, writing=False) as fd:
                 general = _search(fd, args, repo, general_directory(), result["warnings"], "general")
-        writing = ACTIONS[action].writes
         # Only saving new content may create storage. Failed lifecycle operations
         # against a missing note must not leave directories behind.
-        with store.directory(directory, create=action == "save", writing=writing) as fd:
+        with store.directory(directory, create=action == "save", writing=ACTIONS[action].writes) as fd:
             if action == "search":
                 # Repository notes first, then general lessons, within one limit.
                 own = _search(fd, args, repo, directory, result["warnings"])
@@ -255,61 +326,11 @@ def handle(action, root, arguments, *, once=False, session_mode=None):
                 return {**result, **_lint(fd, root, repo, directory)}
             if fd is None:
                 raise MemoryRequestError("memory note does not exist")
-            now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-            if action == "save":
-                duplicates = _duplicates(fd, args["title"], repo, directory, scope)
-                named = "; ".join(f'{note["id"]} "{note["title"]}" ({note["status"]})' for note in duplicates)
-                if duplicates and not args["duplicate_ok"]:
-                    raise DuplicateNoteError(
-                        f"possible duplicate of {named}; nothing was saved. Show these to the user: update or "
-                        "supersede one of them, or resend with duplicate_ok: true only if they still want a "
-                        "separate note", duplicates)
-                if duplicates:
-                    result["warnings"].append(f"saved despite possible duplicates: {named}")
-                metadata = {"schema_version": 1, "id": str(uuid.uuid4()), "kind": args["kind"],
-                            "title": args["title"], "status": args["status"], "date": now[:10],
-                            "created_at": now, "repository": repo["id"], "common_git_dir": repo["common_git_dir"],
-                            **{key: repo[key] for key in ("worktree", "branch", "commit")},
-                            "source": args["source"], "recorded_by": args["recorded_by"],
-                            "pr": args.get("pr"), "confirmation": args["confirmation"], "superseded_by": None,
-                            **_review_dates(args), **({"scope": "general"} if scope == "general" else {})}
-                content = args["content"]
-                store.append_event(metadata, "save", args, repo, now)
-                store.write(fd, metadata, content)
-            else:
+            if action == "get":
                 metadata, content = store.load(fd, args["id"], repo, scope)
-                if action == "accept":
-                    if metadata["status"] == "superseded":
-                        raise MemoryRequestError("superseded notes cannot be accepted; save a new note")
-                    if metadata["status"] != "accepted":
-                        metadata["status"] = "accepted"
-                        store.append_event(metadata, "accept", args, repo, now)
-                        store.write(fd, metadata, content)
-                elif action == "verify":
-                    if metadata["status"] == "superseded":
-                        raise MemoryRequestError("superseded notes cannot be verified; save and accept a replacement")
-                    dates = _review_dates(args)
-                    for key in store.REVIEW:
-                        metadata.pop(key, None)
-                    metadata.update(dates)
-                    store.append_event(metadata, "verify", args, repo, now)
-                    store.write(fd, metadata, content)
-                elif action == "supersede":
-                    if args["replacement_id"] == args["id"]:
-                        raise MemoryRequestError("a note cannot supersede itself")
-                    try:
-                        replacement, _ = store.load(fd, args["replacement_id"], repo, scope)
-                    except MemoryRequestError as error:
-                        raise MemoryRequestError(f"replacement must be an accepted note in the same scope ({scope}): {error}") from error
-                    if replacement["status"] != "accepted":
-                        raise MemoryRequestError("replacement must be an accepted note in the same repository")
-                    if metadata["status"] == "superseded":
-                        if metadata["superseded_by"] != args["replacement_id"]:
-                            raise MemoryRequestError("note is already superseded by a different replacement")
-                    else:
-                        metadata.update(status="superseded", superseded_by=args["replacement_id"])
-                        store.append_event(metadata, "supersede", args, repo, now)
-                        store.write(fd, metadata, content)
+            else:
+                now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+                metadata, content = WRITES[action](fd, args, repo, scope, directory, now, result["warnings"])
             result["note"] = _result(metadata, content, repo, directory)
             return result
     except (OSError, UnicodeError) as error:

@@ -2,7 +2,9 @@
 
 Each action's JSON-schema properties drive request validation, the CLI flags
 (`graphify-worktree memory ...`) and the MCP tool definitions. Adding a field
-or an action is a change here only.
+is a change here only. Adding an action is an entry here plus its
+implementation in memory/service.py (one function in WRITES for a write), and
+the MCP fixture and SKILL.md follow.
 """
 
 import argparse

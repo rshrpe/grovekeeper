@@ -61,3 +61,9 @@ def test_scan_yields_every_note_in_name_order_with_unreadable_ones_as_errors(rep
     metadata, content, error = by_name[broken["id"] + ".md"]
     assert metadata is None and content is None and "cannot read memory note" in str(error)
     assert list(store.scan(None, folder)) == []
+
+
+def test_every_registered_write_action_has_exactly_one_implementation():
+    from graphify_worktree.memory import service
+    from graphify_worktree.memory.schema import ACTIONS
+    assert set(service.WRITES) == {action.name for action in ACTIONS.values() if action.writes}
