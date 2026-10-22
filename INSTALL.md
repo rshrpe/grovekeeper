@@ -71,7 +71,7 @@ graphify-worktree hooks uninstall /path/to/repo
 ./uninstall.sh
 ```
 
-This removes the rules sections, MCP registrations and the recall and nudge hooks (only entries pointing at this tool), the skill links (only links pointing at this checkout) and the uv tool. It leaves `graphify-out/` graphs, generated and authored vaults, memory notes, saved `harness.knowledgeMode` preferences, the global ignore line and all backups.
+This removes the rules sections, MCP registrations and the recall and nudge hooks (only entries pointing at this tool), the skill links (only links pointing at this checkout) and the uv tool. It leaves `graphify-out/` graphs, generated and authored vaults, memory notes, saved repository preferences and settings (`harness.knowledgeMode`, `harness.knowledgeIncremental`, `harness.generalMemory`), the pre-tool nudge's small per-session counters in `~/.local/state/grovekeeper/` (safe to delete), the global ignore line and all backups. Git hook shims left in a repository run only its original hooks once the tool is gone (shims installed before the Phase 2 restructure fail instead), so run `hooks uninstall` first as shown.
 
 ## 7. Roll back to a previous setup
 
