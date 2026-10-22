@@ -41,5 +41,10 @@ def skill_dir():
 
 
 def state_dir():
-    """Small per-user runtime state (session nudge budgets); never inside a repository."""
-    return _path("WORKTREE_KNOWLEDGE_STATE_DIR", ".local/state/grovekeeper")
+    """Small per-user runtime state (session nudge budgets): $XDG_STATE_HOME/grovekeeper.
+
+    Never inside a repository. An empty or relative XDG_STATE_HOME is ignored,
+    as the XDG Base Directory specification requires.
+    """
+    base = os.environ.get("XDG_STATE_HOME", "")
+    return (Path(base) if os.path.isabs(base) else Path.home() / ".local/state") / "grovekeeper"

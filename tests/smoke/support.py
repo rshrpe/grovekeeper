@@ -54,6 +54,7 @@ class Smoke:
     def __init__(self, name):
         self.name = name
         self.checks = []
+        # WORKTREE_KNOWLEDGE_SMOKE_RESULTS is internal to tests/test_smokes.py (a pytest tmp_path).
         directory = Path(os.environ.get('WORKTREE_KNOWLEDGE_SMOKE_RESULTS') or Path(__file__).parent)
         self.result = directory / f'{name}-result.json'
         self.vaults = None

@@ -156,7 +156,7 @@ def test_unwritable_state_is_silent(repo, monkeypatch, tmp_path):
     assert call(repo)
     blocker = tmp_path / "file"
     blocker.write_text("")
-    monkeypatch.setenv("WORKTREE_KNOWLEDGE_STATE_DIR", str(blocker / "state"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(blocker / "state"))
     assert call(repo) == ""
 
 

@@ -26,6 +26,6 @@ uv tool uninstall grovekeeper || true
 cat <<'NOTE'
 Left in place: graphify-out/ directories, generated and authored Obsidian vaults,
 memory notes, harness.knowledgeMode/knowledgeIncremental/generalMemory settings,
-the nudge's counters in ~/.local/state/grovekeeper/ (safe to delete), the global
-'graphify-out/' ignore line, and earlier backups.
+the nudge's counters in ~/.local/state/grovekeeper/ (or $XDG_STATE_HOME/grovekeeper/;
+safe to delete), the global 'graphify-out/' ignore line, and earlier backups.
 NOTE
