@@ -495,3 +495,18 @@ def test_nudge_flag_from_the_command_line(home, tmp_path, checkout, fake_claude)
     assert pre_tool_hooks(home / ".claude/settings.json") == [f"{bin_dir}/graphify-worktree nudge"]
     harness.main([*arguments, "--nudge", "off"])
     assert pre_tool_hooks(home / ".claude/settings.json") == []
+
+
+def test_a_hook_listed_in_hooks_is_installed_flagged_and_uninstalled_without_other_changes(
+        home, tmp_path, checkout, fake_claude, monkeypatch):
+    repo, bin_dir = checkout
+    (home / ".claude").mkdir()
+    extra = harness.HookSpec("Stop", "", "extra", "extra hook", "extra_hook")
+    assert harness.HOOKS == (harness.RECALL_HOOK, harness.NUDGE_HOOK)
+    monkeypatch.setattr(harness, "HOOKS", (*harness.HOOKS, extra))
+    settings = home / ".claude/settings.json"
+    harness.main(["install", "--repo", str(repo), "--bin-dir", str(bin_dir),
+                  "--backup-dir", str(tmp_path / "backup"), "--extra-hook", "on"])
+    assert json.loads(settings.read_text())["hooks"]["Stop"][0]["hooks"][0]["command"] == f"{bin_dir}/graphify-worktree extra"
+    harness.uninstall(repo, bin_dir, tmp_path / "uninstall-backup")
+    assert "hooks" not in json.loads(settings.read_text())

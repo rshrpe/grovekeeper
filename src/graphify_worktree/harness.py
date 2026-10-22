@@ -172,13 +172,17 @@ class HookSpec:
     matcher: str
     subcommand: str     # graphify-worktree SUBCOMMAND
     label: str          # how install reports it
+    option: str         # install keyword and --flag (underscores as dashes) that register or remove it
 
 
 # Claude Code and Codex share this hook schema and both treat a failing or slow
 # hook as non-blocking. Both commands always exit 0 and never deny a tool call.
 # SessionStart sources: Claude Code startup|resume|clear|compact|fork, Codex the same without fork.
-RECALL_HOOK = HookSpec("SessionStart", "startup|resume|clear|compact|fork", "recall", "session-start recall")
-NUDGE_HOOK = HookSpec("PreToolUse", "^(Grep|Glob|Read|Bash|mcp__graphify__.*)$", "nudge", "pre-tool nudge")
+RECALL_HOOK = HookSpec("SessionStart", "startup|resume|clear|compact|fork", "recall", "session-start recall",
+                       "session_recall")
+NUDGE_HOOK = HookSpec("PreToolUse", "^(Grep|Glob|Read|Bash|mcp__graphify__.*)$", "nudge", "pre-tool nudge", "nudge")
+# Every opt-in hook: install, uninstall and the command line all iterate this.
+HOOKS = (RECALL_HOOK, NUDGE_HOOK)
 HOOK_TIMEOUT_SEC = 5
 HOOK_FILES = {"claude": ".claude/settings.json", "codex": ".codex/hooks.json"}
 CODEX_TRUST = "Codex skips new hooks until you trust them: run /hooks in Codex once"
@@ -376,7 +380,11 @@ def _edit_json(path, change, backup_dir):
 
 # Install / uninstall -------------------------------------------------------
 
-def install(repo, bin_dir, backup_dir, *, session_recall=None, nudge=None, report=print):
+def install(repo, bin_dir, backup_dir, *, report=print, **wanted):
+    """wanted maps a hook's option (session_recall, nudge) to True, False or None (unchanged)."""
+    unknown = wanted.keys() - {spec.option for spec in HOOKS}
+    if unknown:
+        raise TypeError(f"unknown hook options: {', '.join(sorted(unknown))}")
     repo, bin_dir, backup_dir = Path(repo).resolve(), Path(bin_dir), Path(backup_dir)
     home = Path.home()
     template = (repo / "harness/worktree-knowledge.md").read_text(encoding="utf-8")
@@ -415,8 +423,8 @@ def install(repo, bin_dir, backup_dir, *, session_recall=None, nudge=None, repor
             config = home / ".omp/agent/config.yml"
             if not omp_discovers(skill_dir, config.read_text(encoding="utf-8") if config.exists() else ""):
                 report(f"omp: add {skill_dir.parent} to skills.customDirectories in {config} so OMP discovers the skill")
-        _hook(RECALL_HOOK, name, home, bin_dir, session_recall, backup_dir, report)
-        _hook(NUDGE_HOOK, name, home, bin_dir, nudge, backup_dir, report)
+        for spec in HOOKS:
+            _hook(spec, name, home, bin_dir, wanted.get(spec.option), backup_dir, report)
 
     ignore = global_excludes_file()
     report(f"git: {ignore} {'now ignores' if ensure_ignore_line(ignore) else 'already ignores'} {IGNORE_LINE}")
@@ -442,7 +450,7 @@ def uninstall(repo, bin_dir, backup_dir, *, report=print):
             _edit(home / ".codex/config.toml", remove_toml_server, backup_dir)
         elif name == "omp" and (home / ".omp/agent/mcp.json").exists():
             _edit_json(home / ".omp/agent/mcp.json", remove_json_server, backup_dir)
-        for spec in (RECALL_HOOK, NUDGE_HOOK):
+        for spec in HOOKS:
             _hook(spec, name, home, bin_dir, False, backup_dir, report)
     if unlink_if_points_to(skill_dir, source):
         report(f"skill: removed link {skill_dir}")
@@ -456,10 +464,9 @@ def main(argv=None):
     install_parser.add_argument("--repo", required=True, help="grovekeeper checkout providing the skill and rules")
     install_parser.add_argument("--bin-dir", required=True, help="directory holding graphify-worktree-mcp")
     install_parser.add_argument("--backup-dir", required=True)
-    install_parser.add_argument("--session-recall", choices=("on", "off"),
-                                help="register (on) or remove (off) the session-start recall hook; omitted leaves it unchanged")
-    install_parser.add_argument("--nudge", choices=("on", "off"),
-                                help="register (on) or remove (off) the pre-tool nudge hook; omitted leaves it unchanged")
+    for spec in HOOKS:
+        install_parser.add_argument("--" + spec.option.replace("_", "-"), choices=("on", "off"),
+                                    help=f"register (on) or remove (off) the {spec.label} hook; omitted leaves it unchanged")
     uninstall_parser = actions.add_parser("uninstall")
     uninstall_parser.add_argument("--repo", required=True)
     uninstall_parser.add_argument("--bin-dir", required=True)
@@ -467,9 +474,9 @@ def main(argv=None):
     arguments = parser.parse_args(argv)
     try:
         if arguments.action == "install":
-            wanted = {"on": True, "off": False, None: None}
+            switch = {"on": True, "off": False, None: None}
             install(arguments.repo, arguments.bin_dir, arguments.backup_dir,
-                    session_recall=wanted[arguments.session_recall], nudge=wanted[arguments.nudge])
+                    **{spec.option: switch[getattr(arguments, spec.option)] for spec in HOOKS})
         else:
             uninstall(arguments.repo, arguments.bin_dir, arguments.backup_dir)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
