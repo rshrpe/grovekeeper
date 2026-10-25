@@ -12,8 +12,8 @@ from pathlib import Path
 import sys
 import tomllib
 
-from graphify_worktree import harness, hooks, settings, upstream
-from graphify_worktree.errors import KnowledgeError, PolicyError
+from graphify_worktree import export_state, harness, hooks, settings, upstream
+from graphify_worktree.errors import KnowledgeError, PolicyError, SettingsError
 from graphify_worktree.policy import SETTINGS, get_policy
 
 
@@ -24,18 +24,36 @@ def _versions(findings):
         pins[package] = {"pinned": pinned, "installed": installed, "ok": installed == pinned}
         if installed != pinned:
             findings.append(f"{package} {installed or 'is not installed'} is installed but {pinned} is pinned; "
-                            "every command except recall, nudge, doctor and --version refuses to run. Reinstall grovekeeper.")
+                            "graph commands and the MCP server refuse to run; metadata-only retire commands remain available. Reinstall grovekeeper.")
     return pins
 
 
-def _locations(findings):
+def _configuration(findings):
+    path = settings.config_path()
+    report = {"path": str(path), "exists": False}
+    try:
+        report["exists"] = path.exists()
+        report["settings"] = {name: {"source": value["source"]} for name, value in settings.describe().items()}
+    except (SettingsError, OSError) as error:
+        report["error"] = str(error)
+        findings.append(f"configuration: {error}")
+    return report
+
+
+def _locations(findings, reported=None):
+    """reported: the configuration error already in findings; a location failing with it adds no finding."""
     locations = {}
+
+    def failed(name, error):
+        locations[name] = {"error": str(error)}
+        if str(error) != reported:
+            findings.append(f"{name}: {error}")
+
     for name, read in (("graph_vault_root", settings.graph_vault_root), ("memory_vault", settings.memory_vault)):
         try:
             path = read()
         except KnowledgeError as error:
-            locations[name] = {"error": str(error)}
-            findings.append(f"{name}: {error}")
+            failed(name, error)
             continue
         traverses = Path(os.path.realpath(path)) != path
         locations[name] = {"path": str(path), "exists": path.exists(), "traverses_symlink": traverses}
@@ -48,8 +66,7 @@ def _locations(findings):
         if not present:
             findings.append(f"Obsidian CLI not found at {cli}; only `export --open` needs it")
     except KnowledgeError as error:
-        locations["obsidian_cli"] = {"error": str(error)}
-        findings.append(f"obsidian_cli: {error}")
+        failed("obsidian_cli", error)
     return locations
 
 
@@ -145,17 +162,48 @@ def _repository(path, findings):
     return result
 
 
+def _retirement(findings):
+    report = {"path": str(export_state.retirement_path()), "sample_limit": 50,
+              "eligibility": "not checked; use retire reconcile --all --dry-run"}
+    if os.environ.get("HARNESS_KNOWLEDGE_MODE", "default") != "default":
+        return {**report, "state": "skipped", "reason": "session knowledge mode is not default"}
+    try:
+        with export_state.retirement_directory() as directory:
+            if directory is None:
+                return {**report, "state": "absent", "registered_exports": 0, "exports": []}
+            identifiers = export_state.export_ids(directory)
+            exports = []
+            for identifier in identifiers[:report["sample_limit"]]:
+                entry = {"export_uuid": identifier}
+                try:
+                    record, _ = export_state.read_record(directory, identifier)
+                    entry["publication_state"] = record.get("state") if record is not None else "missing"
+                except (KnowledgeError, OSError) as error:
+                    entry["error"] = str(error)
+                    findings.append(f"retirement export {identifier}: {error}")
+                exports.append(entry)
+            return {**report, "state": "present", "registered_exports": len(identifiers),
+                    "truncated": len(identifiers) > len(exports), "exports": exports}
+    except (KnowledgeError, OSError) as error:
+        findings.append(f"retirement: {error}")
+        return {**report, "state": "error", "error": str(error)}
+
+
 def report(path):
     """The read-only installation report for the repository containing path."""
     findings = []
+    pins = _versions(findings)
+    configuration = _configuration(findings)
     result = {
         "package": {"grovekeeper": upstream.installed_version("grovekeeper"), "python": sys.executable},
-        "pins": _versions(findings),
-        "locations": _locations(findings),
+        "pins": pins,
+        "configuration": configuration,
+        "locations": _locations(findings, configuration.get("error")),
         "harnesses": _harnesses(findings),
         "session": {"HARNESS_KNOWLEDGE_MODE": os.environ.get("HARNESS_KNOWLEDGE_MODE", "default"),
                     "debug": os.environ.get("WORKTREE_KNOWLEDGE_DEBUG") == "1"},
         "repository": _repository(path, findings),
+        "retirement": _retirement(findings),
     }
     result["findings"] = findings
     return result

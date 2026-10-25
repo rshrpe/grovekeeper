@@ -1,9 +1,15 @@
 ---
 name: worktree-knowledge
-description: Check project opt-in before Graphify or project-related Obsidian use; configure knowledge modes, recall shared project memory, propose approved decisions/facts/lessons, preserve superseded history, honor session opt-out, and manage worktree graphs. Shared workflow for OMP, Claude Code, and Codex.
+description: Use before project-related Graphify or Obsidian operations, shared-memory retrieval or writes, worktree-local learning, or generated-export retirement and recovery in OMP, Claude Code, or Codex.
 ---
 
 # Worktree knowledge
+
+## Use the assigned checkout
+
+For supervised Orca work, load `~/.agents/development-workflow.md` and the installed `orca-cli` and `orchestration` skills with their version-matched guides. The shared contract governs coordination and approval; this skill governs knowledge access and generated-export lifecycle.
+
+In an Orca Dispatch, use the canonical absolute root of the assigned checkout, not the UI-focused checkout, primary checkout, common Git directory, or branch name. Otherwise use the current checkout's canonical root. Resolve the intended directory with `git -C /absolute/working/directory rev-parse --show-toplevel` and canonicalize that path before passing it as a worktree CLI operand or MCP `project_path`. A folder workspace outside Git stays `not_repository`; continue ordinary source work there. Keep `graphify-out` and `.venv` independent per checkout, not in Orca shared-directory settings.
 
 ## Check participation before knowledge use
 
@@ -12,7 +18,7 @@ This policy takes precedence over the upstream Graphify skill's broad activation
 Immediately before intended project knowledge use, run the cheap, read-only enrollment check:
 
 ```sh
-graphify-worktree policy /absolute/working/directory
+graphify-worktree policy /absolute/worktree/root
 ```
 
 This does not scan sources, hash graphs, create locks, or touch vaults. `not_repository` and `unconfigured` default to off. Normal code edits, source navigation, and DRY/YAGNI/SOLID/KISS reviews need neither enrollment nor a knowledge prompt.
@@ -67,7 +73,7 @@ Use one kind: `decision` (choice and rationale), `fact` (verified convention/con
 
 Save through `memory_save` with `kind`, `title`, `content`, `source` (evidence/context), `recorded_by` (`omp`, `claude`, `codex`, or `manual`), and optional `pr`. Every write requires `confirmed: true` and nonempty `confirmation` describing the actual user approval; never invent it. Default `status` is `proposed`. Use `accepted` only when the user explicitly accepts the note as repository-wide knowledge, not merely as an experiment on the current branch.
 
-Creation automatically captures repository identity, UTC date, current worktree, branch, and commit. Notes live under `~/Obsidian/Engineering/Projects/<repository-identity>/Memory/` (vault overridable with `WORKTREE_KNOWLEDGE_MEMORY_VAULT`), separate from generated graphs. Worktrees share a repository identity derived from the absolute path of their common Git directory, so identity is per clone and per machine: independent clones, and the same repository checked out at a different path or on another machine, get separate namespaces. Syncing the Engineering vault between engineers does not merge their notes; another clone's notes are rejected as belonging to another repository. Storage is ordinary Markdown with frontmatter, and works when Obsidian is closed. Opening/viewing notes through native Obsidian commands still requires the app.
+Creation automatically captures repository identity, UTC date, current worktree, branch, and commit. Notes live under `Projects/<repository-identity>/Memory/` in the configured memory vault (default `~/Obsidian/Engineering`; see location settings below), separate from generated graphs. Worktrees share a repository identity derived from the absolute path of their common Git directory, so identity is per clone and per machine: independent clones, and the same repository checked out at a different path or on another machine, get separate namespaces. Syncing the Engineering vault between engineers does not merge their notes; another clone's notes are rejected as belonging to another repository. Storage is ordinary Markdown with frontmatter, and works when Obsidian is closed. Opening/viewing notes through native Obsidian commands still requires the app.
 
 ### Accept or supersede without erasing history
 
@@ -97,10 +103,9 @@ Shared Obsidian memory does not synchronize or disable native Claude/OMP/Codex m
 
 ## Ensure freshness before answering
 
-Only after participation allows graph use, resolve the active checkout's canonical root. Every managed graph/PR tool checks actual source content, HEAD, branch, scope, extraction version, and graph provenance. Missing/stale graphs are rebuilt once under the worktree lock; concurrent callers reuse the completed generation. New worktrees inherit repository participation but build their own graph only when first queried. Memory retrieval does not trigger graph initialization.
+Only after participation allows graph use, ensure freshness for the assigned canonical root. Every managed graph/PR tool checks actual source content, HEAD, branch, scope, extraction version, and graph provenance. Missing/stale graphs are rebuilt once under the worktree lock; concurrent callers reuse the completed generation. New worktrees inherit repository participation but build their own graph only when first queried. Memory retrieval does not trigger graph initialization.
 
 ```sh
-git -C /absolute/working/directory rev-parse --show-toplevel
 graphify-worktree ensure /absolute/worktree/root
 ```
 
@@ -164,13 +169,15 @@ A remote PR merge does not change local files. Never automatically fetch/pull/re
 graphify-worktree export /absolute/worktree/root --open
 ```
 
-Export only a fresh graph. Each worktree gets a separate generated vault at `~/Obsidian/Graphify/<repository>/<worktree>-<id>/` (root overridable with `WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT`). `<repository>` is the same path-safe repository name used for its memory namespace, and the path-derived ID keeps worktree names from colliding. Graphify emits unqualified wikilinks: never combine multiple worktree exports inside a single vault. Generated notes/Canvas are disposable; do not author durable content there.
+Export only a fresh graph. Each worktree gets a separate generated vault at `<graph_vault_root>/<repository>/<worktree>-<id>/` (default root `~/Obsidian/Graphify`; see location settings below). `<repository>` is the same path-safe repository name used for its memory namespace, and the path-derived folder ID keeps worktree names from colliding. Graphify emits unqualified wikilinks: never combine multiple worktree exports inside a single vault. Keep durable authored content in Engineering; existing custom notes and `.obsidian` in a generated vault are protected, not disposable.
 
-`export --wiki` also writes upstream Graphify's wiki (an `index.md` plus one article per community and per hub node, linked with relative Markdown links) to `_graphify-worktree/wiki/` in the same generated vault. It needs the same fresh graph and Obsidian participation, and is regenerated on every `--wiki` export. An export without `--wiki` removes the wiki pages of an earlier one so they never sit stale beside a fresh export. Like the rest of the generated vault it is disposable and code-only; do not author content there.
+Each export incarnation has an immutable export UUID, independent of folder and branch names, and an external lifecycle record under `retirement/exports/EXPORT_UUID/record.json` in Grovekeeper's state directory. Generated output is staged and inventoried by relative path, size and SHA-256 hash. Publication and pruning require verified ownership and unchanged previous bytes; modified generated files and unowned collisions block them. Incomplete publication remains ineligible for retirement. Legacy exports can adopt only byte-identical freshly regenerated outputs; orphaned legacy exports without records are not discovered by reconciliation and remain untouched for manual review.
+
+`export --wiki` also writes upstream Graphify's wiki (an `index.md` plus one article per community and per hub node, linked with relative Markdown links) to `_graphify-worktree/wiki/` in the same generated vault. It needs the same fresh graph and Obsidian participation, and is regenerated on every `--wiki` export. An export without `--wiki` prunes an earlier wiki only through the same ownership/hash checks; edited or unowned files remain protected. The wiki is code-only; keep durable authored content in Engineering.
 
 For graphs above 5,000 nodes, `graph.canvas` is a paged community index (at most 100 links per page, one level, so at most 10,000 communities; a larger graph's export fails with exit 1 while MCP and the community notes still cover it), not a raw all-symbol Canvas. Every community note remains reachable, and the complete graph remains available through MCP and symbol notes. Smaller graphs retain the native symbol Canvas. Do not overwrite this with `graphify export obsidian` directly: the raw 96k-node Canvas timed out in Obsidian.
 
-Keep durable project notes, accepted decisions, and runbooks in `~/Obsidian/Engineering`. Label branch-specific findings as proposed/experimental until accepted. Use the `obsidian-cli` and `obsidian-markdown` skills. Always specify the vault explicitly, because the focused vault may belong to another worktree:
+Keep durable project notes, accepted decisions, and runbooks in the configured memory vault (default `~/Obsidian/Engineering`). Label branch-specific findings as proposed/experimental until accepted. Use the `obsidian-cli` and `obsidian-markdown` skills. Always specify the vault explicitly, because the focused vault may belong to another worktree:
 
 ```sh
 obsidian vault="Engineering" search query="<repository name>"
@@ -178,25 +185,105 @@ obsidian vault="Engineering" search query="<repository name>"
 
 Obsidian must be open for native CLI operations. Graph queries/ensure do not create, refresh, register, or open generated vaults; export remains explicit and requires a fresh graph. Refresh a designated mainline checkout after its owner updates it instead of merging branch graphs. Removing a worktree does not authorize deleting authored knowledge or other worktrees' generated vaults.
 
+## Worktree and generated-export retirement
+
+### CLI and authorization
+
+```text
+graphify-worktree retire prepare WORKTREE [--dry-run | --apply]
+    [--local-data-approval FILE]
+graphify-worktree retire reconcile (--candidate EXPORT_UUID | --all)
+    [--grant GRANT_UUID]
+    [--dry-run | --apply --plan-sha256 DIGEST [--confirmation TEXT]]
+graphify-worktree retire restore --candidate EXPORT_UUID
+    [--dry-run | --apply --plan-sha256 DIGEST --confirmation TEXT]
+graphify-worktree retire policy show (REPO_PATH | --grant GRANT_UUID)
+graphify-worktree retire policy grant REPO_PATH --export-root ABSOLUTE_ROOT
+    [--dry-run | --apply --plan-sha256 DIGEST --confirmation TEXT]
+graphify-worktree retire policy revoke --grant GRANT_UUID [--dry-run | --apply]
+```
+
+All defaults are read-only previews: no new files, locks, registry or quarantine. `--dry-run` and `--apply` are mutually exclusive; `--all --apply` is rejected. Reconciliation applies one immutable export UUID and its exact current plan digest, with exactly one authorization source: `--grant` or explicit `--confirmation`. A preview may use `--grant` to filter scope without moving files. Restore and grant creation require the previewed digest and actual user confirmation on apply; never invent approval text. Repeated explicit `--export-root` values may extend the previewed grant, but expanding scope requires new approval.
+
+Two independent cleanup permissions are required for their respective operations:
+
+- **Worktree removal:** the coordinator enforces an explicitly approved policy for clean, inactive, positively integrated linked worktrees of this clone. It may include Orca's safe local-branch deletion attempt, but never force flags, remote-branch deletion, dirty-file loss, current main/root deletion or unknown worker termination.
+- **Generated-export quarantine:** Grovekeeper enforces a separately approved grant stored at `retirement/grants/GRANT_UUID.json`, bound to this host, repository/common-Git identity and explicit generated roots. Its scope is unchanged manifest-owned generated files and its action is recoverable quarantine, not deletion of an entire vault.
+
+Knowledge enrollment and location settings grant neither cleanup permission. Neither cleanup permission authorizes memory writes, acceptance/promotion into Engineering, or loss of graph-local learning. Durable memory still needs the explicit content/status approval described above; local data needs the separate inventory-bound guard below. Default cleanup is report-only; supporting a standing grant does not activate one.
+
+Each application revalidates authorization, scope, session mode, readiness, plan digest and current hashes under the lifecycle lock. Receipts record the grant digest when used, approval reference, plan and per-file outcomes. Revocation prevents subsequent operations and resumptions; it does not undo completed moves.
+
+Lifecycle commands bypass Graphify/MCP dependency-pin validation because they operate on metadata, filesystem and Git state, not extraction. They still enforce session opt-out and their own authorization. Inspect candidate states even after exit 0: previews may report blockers. Applied blocked/partial operations return 1, usage errors 2, policy denial 5 and interruption 130; interruption output identifies recoverable lifecycle state rather than claiming a discarded graph.
+
+### Protect local data before removal
+
+`retire prepare --apply` writes candidate/guard metadata only; it never removes or rebuilds anything. `graphify-out` is not entirely cache: approved results in `memory/`, `reflections/LESSONS.md` and the learning overlay are local uncommitted data.
+
+Preparation inventories learning and unknown local files by path, size/type and hash, not note content, and returns a removal guard and inventory digest. Unreadable or unsafe data blocks removal. Nonempty learning or unowned data needs verified retention outside the checkout or explicit inventory-bound approval of loss supplied with `--local-data-approval FILE`; without it the hook returns nonzero. New data invalidates an earlier inventory approval. Export-quarantine grants never substitute for this approval.
+
+The coordinator separately checks the whole checkout for dirty, untracked and ignored-but-nondisposable files, unsaved buffers, active workers and unresolved children. Quiesce writers and recheck immediately before removal: the graph-local guard is not a universal loss detector, and an earlier archive-hook snapshot is insufficient. Explicit user hook skips/waivers and out-of-band deletion remain outside these guarantees.
+
+Prove integration into freshly resolved `origin/main`: for normal merge/fast-forward, the exact reviewed head must be an ancestor; for squash/rebase, authoritative merged-review evidence must match repository, base, reviewed head and reachable resulting integration. A closed PR, deleted branch, task completion, idle age or successful `git branch -d` is insufficient. Uncommitted worker changes remain a blocker even if similar edits appear on main; request explicit retention/discard approval.
+
+### Reconcile at coordinator boundaries
+
+Install the repository's `orca.yaml` only after the lifecycle CLI exists; confirm executable resolution and hook trust in actual Orca-created terminals. Its setup waits for `uv sync --frozen --python 3.12`; its archive command is `graphify-worktree retire prepare . --apply`. Source configuration alone does not install, enroll or grant cleanup permission.
+
+The archive hook runs before Orca stops workers and can be skipped: it records candidates and early blockers only. The coordinator performs the quiesced preflight above, uses `--run-hooks` for managed CLI removal and inspects background-removal completion, not just a `removed` label.
+
+At startup/resume, after completed worktree removal and at task completion, whichever harness coordinates runs this read-only reconciliation for enrolled repositories when the lifecycle command is installed:
+
+```sh
+graphify-worktree retire reconcile --all --dry-run
+```
+
+Apply eligible current plans individually only under a recorded approved matching grant. Export-time registration discovers exports after skipped archive hooks or missed notifications; direct UI deletion is reconciled at the next invocation. New exports record the worktree parent's identity. Older records gain that identity on the next completed re-export when their existing identities still match; without re-export or preparation, reconciliation reports `parent_identity_unrecorded` and keeps the export. Retirement without a preparation candidate warns that local `graphify-out` learning was not inventoried: proving removal does not prove that local learning was protected. Experimental `worktree.removed` events can mean forget-only and are not durable proof. Nothing runs while every coordinator is closed: there is no daemon or promised immediate/bounded background cleanup, and a standing grant does not schedule work.
+
+Reconciliation requires the original linked-worktree root to be absent through an accessible unchanged parent, an accessible saved common Git directory with matching identity, no Git registration or original administrative directory, and matching export identity/manifest. Existing or partially removed roots, moved worktrees, path reuse, inaccessible mounts, changed common-Git identity, foreign hosts and unavailable storage block cleanup. Grovekeeper does not fetch, prune, delete branches/worktrees, stop workers or schedule merges.
+Retirement currently requires Linux's `/etc/machine-id` and Git 2.36 or newer for NUL-delimited worktree enumeration. An absent host identity or unsupported Git fails closed; macOS retirement is not supported by this implementation. Reused checkout paths and replaced vault identities require manual resolution, not relaxed identity checks.
+
+Obsidian vault registration is separate from disk state: report stale registrations for supported UI removal rather than silently editing them. Forgetting/removing an ordinary folder workspace never authorizes deletion of its underlying folder.
+
+### Quarantine and recovery limits
+
+Only unchanged owned generated files move into a same-filesystem sibling `.grovekeeper-quarantine/EXPORT_UUID/OPERATION_UUID/`, with a durable operation journal written before moves and a receipt. Modified generated files, custom notes and `.obsidian` remain at their original paths. There is no blanket recursive deletion, cross-device copy-and-delete fallback or timed purge.
+
+On retry, distinguish source-only, already-quarantined, duplicate/conflicting and unexpectedly missing files. Check identities/hashes before and after moves, stop on racing writes, preserve bytes and report conflicts; never call unexplained loss success. POSIX locks are advisory, not protection against arbitrary same-user editors.
+
+After marker archival, remove only verified-owned empty directories bottom-up with `rmdir`, including the export root only if truly empty. Report residual notes/settings and leave their directory in place. Quarantine preserves bytes and consumes disk space until separately approved permanent disposal.
+
+`retire restore` previews/restores only recorded quarantined files and owned empty directories, never overwrites an existing path and never recreates a Git worktree. After an explicit restore, quarantining that export again requires the preview's `--confirmation`; a standing grant cannot immediately retire it again. Preserve receipts and quarantines after interruption; revoking a grant or rolling back code does not restore moved bytes. Before removing the lifecycle-capable executable, stop retirement activity and use of its archive hook, revoke the grant, then preview and explicitly approve any restoration; preserve conflicts rather than overwrite reused paths.
+
 ## Installation constraints
 
 Install from a grovekeeper checkout (the repository that ships this skill) with `./install.sh` (details in the repository's `INSTALL.md`). Prerequisites: macOS or Linux, Python 3.11 or newer (uv provides 3.12 by default), Git 2.31 or newer, uv, and Obsidian with its native CLI enabled for Obsidian features. The installer:
 
 - installs the `grovekeeper` uv tool with the locked dependency set (`graphifyy[mcp,sql]==0.9.93`, `mcp==2.3.0`), providing `graphify-worktree` and `graphify-worktree-mcp` in uv's tool bin directory (normally `~/.local/bin`);
-- links this skill into `~/.agents/skills/worktree-knowledge` and `~/.claude/skills/worktree-knowledge`. OMP discovers it through `skills.customDirectories`; Codex discovers `~/.agents/skills` natively. Do not duplicate the skill into `~/.codex/skills`. Codex uses `$worktree-knowledge` and `$graphify` for explicit invocation;
+- links this skill into `~/.agents/skills/worktree-knowledge` and `~/.claude/skills/worktree-knowledge`. OMP discovers the agents user directory with `skills.enableAgentsUser=true`, or through `skills.customDirectories` when needed; verify fresh-session discovery before changing settings. Codex discovers `~/.agents/skills` natively. Do not duplicate the skill into `~/.codex/skills`. Codex uses `$worktree-knowledge` and `$graphify` for explicit invocation;
 - registers the managed `graphify-worktree-mcp` server as `graphify` at user scope in Claude Code (through `claude mcp add-json`), Codex (`[mcp_servers.graphify]` in `~/.codex/config.toml`, shared by its CLI and desktop) and OMP (`~/.omp/agent/mcp.json`), using the absolute command path. All three harnesses must use that managed entrypoint, never the upstream `graphify-mcp`;
 - renders the participation-first global rules from one template into `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` and `~/.omp/agent/RULES.md`, between `worktree-knowledge` marker comments;
 - adds `graphify-out/` to the user's global Git ignore file (`core.excludesFile`, else `~/.config/git/ignore`). This is a prerequisite, not something the wrapper does at run time: graphs are never committed and repository ignore rules are not edited.
 
-Every replaced file and any previous non-uv executables are copied into a timestamped backup directory first. `./uninstall.sh` removes the registrations, rules sections and links, and leaves graphs, vaults, memory notes, saved preferences and settings, the nudge's counters in `~/.local/state/grovekeeper/` (or `$XDG_STATE_HOME/grovekeeper/`) and backups in place. Restart existing harness sessions after installation or upgrades so they launch the new server and reload skills; named OMP profiles need equivalent user MCP configuration. Code-only extraction does not require Codex multi-agent mode.
+The installer backs up the rules, Codex/OMP MCP configuration and recall/nudge hook files it rewrites, and preserves replaced skill links. Back up `~/.claude.json` and the selected global Git ignore file yourself: the installer does not. Executable backups preserve the entry or symlink, not the uv environment. `./uninstall.sh` leaves graphs, vaults, memory notes, saved preferences, `config.toml`, nudge counters, retirement records/grants/journals/receipts, quarantine folders and backups in place. Restart existing harness sessions after installation or upgrades so they launch the new server and reload skills; named OMP profiles need equivalent user MCP configuration. Code-only extraction does not require Codex multi-agent mode.
 
-Machine-specific locations are environment-configurable with the current defaults: `WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT` (`~/Obsidian/Graphify`), `WORKTREE_KNOWLEDGE_MEMORY_VAULT` (`~/Obsidian/Engineering`), `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI` (`~/.local/bin/obsidian`), and `WORKTREE_KNOWLEDGE_SKILL_DIR` (`~/.agents/skills/worktree-knowledge`, used by the installer). The pre-tool nudge keeps its counters under the standard `XDG_STATE_HOME` (default `~/.local/state`) in `grovekeeper/`. Incremental rebuilds and general memory are repository settings (`configure --incremental` / `--general-memory`), not environment variables. Overrides must be absolute or start with `~`. Set them in the environment the harness launches the MCP server with, or every process sees a different vault.
+Machine-specific locations resolve at call time from a nonempty `WORKTREE_KNOWLEDGE_*` environment override, then the corresponding `[paths]` key in `$XDG_CONFIG_HOME/grovekeeper/config.toml` (absolute XDG setting) or `~/.config/grovekeeper/config.toml`, then the built-in default:
+
+| TOML key | Environment override | Default |
+|---|---|---|
+| `graph_vault_root` | `WORKTREE_KNOWLEDGE_GRAPH_VAULT_ROOT` | `~/Obsidian/Graphify` |
+| `memory_vault` | `WORKTREE_KNOWLEDGE_MEMORY_VAULT` | `~/Obsidian/Engineering` |
+| `obsidian_cli` | `WORKTREE_KNOWLEDGE_OBSIDIAN_CLI` | `~/.local/bin/obsidian` |
+
+Missing config is normal. Malformed TOML, wrong types, unknown path keys and non-absolute/non-tilde paths are errors, not permission to silently select another vault. Use the shared file for consistent direct CLI, recall and MCP paths instead of duplicating environment settings in each harness; a process's nonempty environment overrides still win. These settings authorize no participation, session access, general memory or cleanup.
+
+`WORKTREE_KNOWLEDGE_SKILL_DIR` remains an installer override (default `~/.agents/skills/worktree-knowledge`), not a TOML location key. Grovekeeper's state directory is `$XDG_STATE_HOME/grovekeeper/` (default `~/.local/state/grovekeeper/`): nudge counters live under `nudge/`, and lifecycle records/grants under `retirement/`. Quarantined bytes stay beside their generated vault on the same filesystem, not in the state directory. Incremental rebuilds and general memory remain repository settings (`configure --incremental` / `--general-memory`).
 
 OMP's Graphify request timeout is 600,000 ms and Codex's `tool_timeout_sec` is 600 to allow full content verification/rebuilds on larger checkouts. Timeout or cancellation is not a fresh result; use source tools or prewarm with CLI `ensure` before retrying. Claude's MCP timeout configuration is unchanged.
 
 `policy` works in a read-only Codex sandbox. Enabled graph `status` needs workspace-write access: freshness inspection takes a per-worktree lock and creates temporary detection files under `graphify-out/`. Disabled/unconfigured `status` stops before those writes. Do not misreport a permission error as a fresh graph or disable sandboxing globally. Approve managed Graphify tool access when prompted, including `knowledge_session` for session opt-out. Noninteractive `--ask-for-approval never` refuses tools that still need approval; for controlled smoke runs approve only the required tools using per-invocation `mcp_servers.graphify.tools.<tool>.approval_mode="approve"` overrides.
 
-The package pins `graphifyy[mcp,sql]==0.9.93` with `mcp==2.3.0` and refuses to start (exit 1) when other versions are installed, because it relies on private upstream APIs. Upgrade by changing the pins, re-locking, running the smokes and reinstalling. Graphify supports MCP 2; the old `mcp<2` workaround is obsolete. SQL support is installed for database/migration relationships.
+The package pins `graphifyy[mcp,sql]==0.9.93` with `mcp==2.3.0` and rejects graph operations/server startup (exit 1) when other versions are installed, because it relies on private upstream APIs. Metadata-only lifecycle commands bypass these pin checks, as do the existing diagnostic commands. Upgrade by changing the pins, re-locking, running the smokes and reinstalling. Graphify supports MCP 2; the old `mcp<2` workaround is obsolete. SQL support is installed for database/migration relationships.
 
 Refresh the canonical upstream skill after upgrading with `"$(uv tool dir)/grovekeeper/bin/graphify" install --platform agents` (skill-only). Do not run per-platform installers or install upstream rebuild hooks over this wrapper-managed setup: they can introduce competing routing and refresh instructions. Run the integration smokes after dependency changes. Old graphs become stale when the Graphify version changes; refresh the selected worktree before querying it and re-export its generated vault afterward. Never rebuild an unrelated or actively changing checkout merely to validate an installation.
 
@@ -221,13 +308,13 @@ CLI exit codes (JSON results go to stdout, operation errors to stderr):
 
 | Code | Meaning |
 |---|---|
-| 0 | Success; `status` fresh; `policy` for any valid state including `unconfigured` and `not_repository`; `recall`, `nudge`, `doctor` and `--version` always, even on errors or upstream version mismatch |
-| 1 | Operation error (invalid memory or learning input, memory storage/lifecycle, failed build, `export --open` registration failure, upstream version mismatch); `hooks` conflict, relocated repository or error (JSON on stdout) |
+| 0 | Success; retirement previews may contain blocked candidates, so inspect their state; `status` fresh; `policy` for any valid state including `unconfigured` and `not_repository`; `recall`, `nudge`, `doctor` and `--version` always, even on errors or upstream version mismatch |
+| 1 | Operation error (invalid memory or learning input, memory storage/lifecycle, failed build, `export --open` registration failure, upstream version mismatch); applied blocked/partial retirement; `hooks` conflict, relocated repository or error (JSON on stdout) |
 | 2 | Usage error |
 | 3 | `status`/`export`: graph stale |
 | 4 | `status`/`export`: graph missing |
 | 5 | Policy denied, including invalid/conflicting preferences, session off, and paths outside a Git repository for `configure` and gated commands; JSON on stdout |
-| 130 | Interrupted; any unpublished graph is discarded |
+| 130 | Interrupted; graph extraction discards unpublished output, while retirement reports recoverable lifecycle state |
 
 `ensure` never returns 3 or 4: it rebuilds once or fails with 1.
 
@@ -243,5 +330,6 @@ MCP tool errors set `is_error` and return JSON with an `error` code and `reason`
 | `unknown_tool` | The tool name is not offered by this server (including an unlisted `memory_*` or `learning_*` name) |
 
 `graphify-worktree doctor [PATH]` is a read-only health report that changes nothing and always exits 0. It covers installed versus pinned versions, the vault roots (whether they exist and whether they pass through a symlink), the Obsidian CLI, the MCP registration in each present harness (and whether it points at this installation), the recall and nudge hook entries, the session switches, and the repository's policy, settings and `hooks status`. Problems are listed under `findings`. Run it when a tool or hook behaves unexpectedly and report the findings to the user; repairs such as reinstalling or `hooks install` go through the user. `graphify-worktree --version` (and `graphify-worktree-mcp --version`) print the package and the installed versus pinned upstream versions, even when they mismatch. The MCP server logs one startup line to stderr. To diagnose a silent hook or an unexplained `graph_unavailable`/`memory_operation_failed`, the user can set `WORKTREE_KNOWLEDGE_DEBUG=1` in the CLI or MCP server environment; the traceback then goes to stderr. Nothing changes without it.
+Doctor also reports configuration sources and a bounded sample of up to 50 registered export publication states. This metadata summary does not inspect vaults or prove eligibility; use report-only reconciliation for retirement decisions.
 
 Installation verification also exercises real OMP, Claude Code, and Codex sessions and the Obsidian native UI; the disposable smokes alone do not establish harness authentication or desktop availability. The managed server and the smoke client target the MCP 2 Python SDK (`Tool.input_schema`, `CallToolResult.is_error`); MCP 1.x field names are not supported.

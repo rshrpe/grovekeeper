@@ -1,0 +1,4 @@
+setupAgentStartupPolicy: wait-for-setup
+scripts:
+  setup: uv sync --frozen --python 3.12
+  archive: graphify-worktree retire prepare . --apply

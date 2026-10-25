@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install grovekeeper as a uv tool, then register it with Claude Code,
-# Codex and OMP. Safe to re-run; every replaced file is copied to a backup first.
+# Codex and OMP. See INSTALL.md for backup coverage and the required manual copies.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

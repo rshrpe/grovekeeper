@@ -62,6 +62,14 @@ class UpstreamVersionError(KnowledgeError):
     pass
 
 
+class LifecycleError(KnowledgeError):
+    """A retirement step could not proceed safely; payload names the recoverable state."""
+
+    def __init__(self, reason, payload=None):
+        super().__init__(reason)
+        self.payload = payload
+
+
 EXIT_CODES = (
     (PolicyError, 5),
     (KnowledgeError, 1),

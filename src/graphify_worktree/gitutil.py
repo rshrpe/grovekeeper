@@ -49,6 +49,24 @@ def common_dir(root):
     return Path(output(root, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve(strict=True)
 
 
+def admin_dir(root):
+    """The worktree's own Git directory; equal to the common directory only for the main worktree."""
+    return Path(output(root, "rev-parse", "--absolute-git-dir")).resolve(strict=True)
+
+
+def registered_worktrees(common):
+    """Worktree paths a saved common Git directory still registers, prunable ones included.
+
+    Read-only and usable after the worktree is gone: nothing is pruned or repaired.
+    """
+    result = subprocess.run(["git", "--git-dir", str(common), "worktree", "list", "--porcelain", "-z"],
+                            cwd=common, env=git_env(), capture_output=True, text=True)
+    if result.returncode:
+        raise GitError(result.stderr.strip() or "git worktree list failed")
+    return [Path(field.removeprefix("worktree ")) for field in result.stdout.split("\0")
+            if field.startswith("worktree ")]
+
+
 def checkout_state(root, *, allow_unborn=False):
     """Branch (None when detached) and HEAD commit (None only when unborn and allowed)."""
     return {

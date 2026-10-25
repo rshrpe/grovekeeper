@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 from graphify_worktree import artifacts, dashboard, diff, doctor, errors, upstream
-from graphify_worktree import hooks, learning, nudge, recall
-from graphify_worktree.errors import PolicyError
+from graphify_worktree import hooks, learning, nudge, recall, retirement
+from graphify_worktree.errors import LifecycleError, PolicyError
 from graphify_worktree.freshness import inspect
 from graphify_worktree.guard import ensure
 from graphify_worktree.memory import handle as handle_memory
@@ -46,7 +46,7 @@ def parser():
     parser = argparse.ArgumentParser(
         prog="graphify-worktree",
         description="Local code-only Graphify graphs and isolated generated Obsidian vaults per Git worktree.",
-        epilog="Exit codes: 0 success/fresh, 1 operation error, 2 usage error, 3 stale, 4 missing, 5 policy denied, 130 interrupted; recall and nudge always 0. No LLM, daemon or global graph merge.",
+        epilog="Exit codes: 0 success/fresh, 1 operation error, 2 usage error, 3 stale, 4 missing, 5 policy denied, 130 interrupted; recall and nudge always 0; retire previews exit 0 even when blocked, applied blocked/partial operations 1. No LLM, daemon or global graph merge.",
     )
     parser.add_argument("--version", action=Version)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -86,6 +86,7 @@ def parser():
     doctor_parser = commands.add_parser("doctor", help="read-only report of versions, locations, harness registrations, hooks and this repository's settings; changes nothing, exits 0")
     doctor_parser.add_argument("path", nargs="?", default=".")
     commands.add_parser("nudge", help="pre-tool hook: read the harness payload on stdin and maybe suggest graph tools (graph consent only); always exits 0")
+    retirement.add_parser(commands)
     return parser
 
 
@@ -151,6 +152,10 @@ def main(argv=None):
         result, code = hooks.run(arguments)
         emit(result)
         return code
+    if arguments.command == "retire":
+        result, code = retirement.run(arguments)
+        emit(result)
+        return code
     if arguments.command == "doctor":
         emit(doctor.report(arguments.path))
         return 0
@@ -205,6 +210,8 @@ def report(error):
         policy = error.policy or {"state": "not_repository" if error.not_repository else "unconfigured",
                                   "saved_mode": None, "effective_mode": "off", "worktree_root": None}
         emit({**policy, "reason": str(error)})
+    elif isinstance(error, LifecycleError) and error.payload is not None:
+        emit({**error.payload, "reason": str(error)})
     else:
         print(f"graphify-worktree: {error}", file=sys.stderr)
     return errors.exit_code(error)
@@ -215,11 +222,17 @@ def entrypoint():
         # Hook commands run on every session start or tool call and must never
         # fail it, so they skip the pin check and fall silent on their own errors.
         # doctor and --version report a mismatch rather than refusing to.
-        if sys.argv[1:2] not in (["recall"], ["nudge"], ["doctor"], ["--version"]):
+        # retire only reads metadata, files and Git, never extracting.
+        if sys.argv[1:2] not in (["recall"], ["nudge"], ["doctor"], ["retire"], ["--version"]):
             upstream.assert_versions()
         code = main()
     except KeyboardInterrupt:
-        print("graphify-worktree: interrupted; unpublished graph discarded", file=sys.stderr)
+        if sys.argv[1:2] == ["retire"]:
+            state = retirement.interrupted()
+            emit(state)
+            print(f"graphify-worktree: interrupted; {state.get('journal') or state.get('lifecycle')}", file=sys.stderr)
+        else:
+            print("graphify-worktree: interrupted; unpublished graph discarded", file=sys.stderr)
         code = errors.INTERRUPTED
     except (errors.KnowledgeError, OSError) as error:
         code = report(error)
