@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed: smaller memory results and a note word limit
+- **Search results are snippets without provenance.** `memory_search` (and `memory search`) results keep `id`, `status`, `kind`, `title`, `path`, applicability, `scope`, `freshness` and the snippet, but no longer carry `provenance`; read it with `memory_get`. On four real notes a search went from about 7,900 to 4,100 characters, and a read from 5,300 to 3,200.
+- **`memory_get` leaves out the metadata block by default.** It returns the content, provenance and applicability; the `metadata` block (which repeats the provenance and holds the full audit history) needs the new `include_audit: true` (CLI `--include-audit`). Write results are unchanged.
+- **Note content is limited to 250 words.** `memory_save` refuses longer content (`invalid_memory_request`, CLI exit 1) and asks for one topic per note. This also applies to a replacement saved for a supersede. Existing notes are not checked and stay readable.
+- **Why:** every coordinator and worker that searches or opens a note pays for it in context, so result size should not grow with provenance or note length.
+
 ### Added for the Orca workflow pilot (needs sign-off)
 - **Persistent location settings: `~/.config/grovekeeper/config.toml`.** An optional `[paths]` table with `memory_vault`, `graph_vault_root` and `obsidian_cli`, read at call time from `$XDG_CONFIG_HOME/grovekeeper/config.toml` when `XDG_CONFIG_HOME` is absolute, otherwise `~/.config/grovekeeper/config.toml`, with the standard library's `tomllib` (no new dependency).
   - **Precedence:** a nonempty `WORKTREE_KNOWLEDGE_*` variable, then the TOML key, then the unchanged default. An empty variable now falls through to the file.
